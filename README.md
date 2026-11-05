@@ -66,6 +66,16 @@ npx wrangler deploy
 | GET | /api/data | 返回连接、账户、交易、权益任务 |
 | PUT | /api/benefits | 保存权益任务列表 |
 | POST | /api/items/remove | 断开一个银行连接 |
+| POST | /api/resync | 清空 cursor，重新拉取全部交易（补齐 MCC 等新字段） |
+| PUT | /api/rewards | 保存积分设置：卡片对应、记住的倍数、各计划余额 |
+| GET | /api/logos | 各银行 logo（Plaid 机构信息，KV 缓存 30 天） |
+
+## 积分估算
+
+- 卡片目录和倍数在 `front/rewards.js`（`PRODUCTS`），按 MCC 分类，没有 MCC 时用 Plaid 的 personal_finance_category
+- 支持 cap（如 Amex Gold 餐饮 $50k/年）、季度轮换（Freedom Flex，新季度在 `quarters` 里加一行）、Custom Cash 月度最高类别
+- 页面右上角设置 →「更新」进入编辑：逐笔改倍数（按 MCC 或商户名记住）、录入各计划余额，再点保存
+- 积分为估算值，以银行账单为准
 
 ## 权益任务的计算方式
 

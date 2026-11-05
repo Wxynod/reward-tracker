@@ -107,6 +107,64 @@ const ROUTES = {
     return { ok: true };
   },
 
+  // 全量重新拉取：cursor 清零，重建交易缓存（用来补齐旧交易缺的 MCC 等字段；/transactions/sync 不按次计费）
+  "POST /api/resync": async (env) => {
+    const ids = await getJSON(env, "items", []);
+    for (const id of ids) {
+      try { await syncItem(env, id, { full: true }); }
+      catch (e) {
+        const item = await getItem(env, id);
+        item.error = { code: e.plaid?.code || "UNKNOWN", message: e.message };
+        await putJSON(env, `item:${id}`, item);
+      }
+    }
+    return loadAll(env);
+  },
+
+  // 积分设置：卡片对应、学习到的倍数规则、各积分计划余额
+  "PUT /api/rewards": async (env, body) => {
+    const r = body.rewards;
+    if (!r || typeof r !== "object" || Array.isArray(r)) throw httpError(400, "rewards must be an object");
+    const clean = {
+      cards: r.cards && typeof r.cards === "object" ? r.cards : {},
+      rules: r.rules && typeof r.rules === "object" ? r.rules : {},
+      balances: r.balances && typeof r.balances === "object" ? r.balances : {},
+    };
+    if (JSON.stringify(clean).length > 200_000) throw httpError(413, "rewards too large");
+    await putJSON(env, "rewards", clean);
+    return { ok: true };
+  },
+
+  // 银行 logo（来自 Plaid 机构信息，按机构缓存在 KV 里，30 天刷新一次）
+  "GET /api/logos": async (env) => {
+    const ids = await getJSON(env, "items", []);
+    const out = {};
+    for (const id of ids) {
+      const item = await getJSON(env, `item:${id}`, null);
+      if (!item?.institution_id) continue;
+      const key = `inst:${item.institution_id}`;
+      let inst = await getJSON(env, key, null);
+      if (!inst || Date.now() - (inst.fetched || 0) > 30 * 864e5) {
+        try {
+          const d = await plaid(env, "/institutions/get_by_id", {
+            institution_id: item.institution_id,
+            country_codes: ["US"],
+            options: { include_optional_metadata: true },
+          });
+          inst = {
+            logo: d.institution.logo || null,
+            color: d.institution.primary_color || null,
+            url: d.institution.url || null,
+            fetched: Date.now(),
+          };
+          await putJSON(env, key, inst);
+        } catch { inst = inst || { logo: null, color: null, url: null }; }
+      }
+      out[item.institution] = { logo: inst.logo, color: inst.color, url: inst.url };
+    }
+    return { logos: out };
+  },
+
   "PUT /api/benefits": async (env, body) => {
     if (!Array.isArray(body.benefits)) throw httpError(400, "benefits must be an array");
     await putJSON(env, "benefits", body.benefits);
@@ -116,8 +174,9 @@ const ROUTES = {
 
 // ---------------------------------------------------------------- sync
 
-async function syncItem(env, itemId) {
+async function syncItem(env, itemId, { full = false } = {}) {
   const item = await getItem(env, itemId);
+  if (full) item.cursor = null;
   let result;
   // 分页期间数据变动时，Plaid 要求从本轮起始 cursor 重来
   for (let attempt = 0; ; attempt++) {
@@ -130,7 +189,7 @@ async function syncItem(env, itemId) {
     }
   }
 
-  const store = await getJSON(env, `txns:${itemId}`, {});
+  const store = full ? {} : await getJSON(env, `txns:${itemId}`, {});
   for (const t of [...result.added, ...result.modified]) store[t.transaction_id] = slimTxn(t);
   for (const r of result.removed) delete store[r.transaction_id];
 
@@ -187,8 +246,11 @@ async function loadAll(env) {
     transactions = transactions.concat(Object.values(txns));
   }
   transactions.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
-  const benefits = await getJSON(env, "benefits", []);
-  return { env: env.PLAID_ENV || "sandbox", items, transactions, benefits };
+  const [benefits, rewards] = await Promise.all([
+    getJSON(env, "benefits", []),
+    getJSON(env, "rewards", { cards: {}, rules: {}, balances: {} }),
+  ]);
+  return { env: env.PLAID_ENV || "sandbox", items, transactions, benefits, rewards };
 }
 
 const slimTxn = (t) => ({
@@ -202,6 +264,9 @@ const slimTxn = (t) => ({
   currency: t.iso_currency_code || t.unofficial_currency_code || "USD",
   category: t.personal_finance_category?.primary || null,
   category_detail: t.personal_finance_category?.detailed || null,
+  mcc: t.merchant_category_code || null, // 4 位 MCC（Plaid beta 字段，部分交易为空）
+  channel: t.payment_channel || null,
+  website: t.website || t.counterparties?.find((c) => c.website)?.website || null, // 用来找品牌 logo
   pending: !!t.pending,
   logo: t.logo_url || null,
 });

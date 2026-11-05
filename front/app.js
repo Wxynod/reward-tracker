@@ -4,7 +4,22 @@
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 
-const state = { env: null, items: [], accounts: {}, txns: [], benefits: [] };
+const R = window.RT_REWARDS;
+const I = window.RT_ICONS;
+const B = window.RT_BRANDS;
+window.brandLoaded = (img) => img.parentNode.classList.add("has-logo");
+window.brandFail = (img) => {
+  if (img.dataset.fallback) { img.src = img.dataset.fallback; delete img.dataset.fallback; return; }
+  img.parentNode.classList.remove("has-logo");
+  img.nextElementSibling?.remove();
+  img.remove();
+};
+const EMPTY_REWARDS = () => ({ cards: {}, rules: {}, balances: {} });
+const state = {
+  env: null, items: [], accounts: {}, txns: [], benefits: [],
+  rewards: EMPTY_REWARDS(), earn: new Map(), logos: {},
+  editing: false, draft: null, catFilter: "",
+};
 
 const cfg = {
   url: (window.RT_CONFIG?.workerUrl || "").replace(/\/+$/, ""),
@@ -36,12 +51,21 @@ function ingest(data) {
   state.items = data.items;
   state.txns = data.transactions;
   state.benefits = data.benefits || [];
+  state.rewards = { ...EMPTY_REWARDS(), ...(data.rewards || {}) };
   state.accounts = {};
   for (const it of data.items) for (const a of it.accounts) state.accounts[a.id] = { ...a, institution: it.institution };
   render();
 }
 
-async function load() { ingest(await api("/api/data")); }
+async function load() {
+  ingest(await api("/api/data"));
+  loadLogos();
+}
+
+async function loadLogos() {
+  try { state.logos = (await api("/api/logos")).logos || {}; renderRewards(); renderAccounts(); }
+  catch { /* logo 拿不到时用 favicon / 字母徽章兜底 */ }
+}
 
 async function sync() {
   const btn = $("#btn-sync");
@@ -115,7 +139,11 @@ function render() {
   const badge = $("#env-badge");
   badge.hidden = state.env !== "sandbox";
   badge.textContent = "SANDBOX";
+  state.earn = R.compute(state.txns, state.accounts, state.rewards);
+  document.body.classList.toggle("editing", state.editing);
   renderAccountSelects();
+  renderRewards();
+  renderSettings();
   renderTxns();
   renderBenefits();
   renderAccounts();
@@ -132,14 +160,16 @@ function renderAccountSelects() {
   }
 }
 
-function filteredTxns() {
+function filteredTxns({ ignoreCat = false } = {}) {
+  const cat = ignoreCat ? "" : state.catFilter;
   const acct = $("#f-account").value;
   const month = $("#f-month").value;
   const q = $("#f-q").value.trim().toLowerCase();
   return state.txns.filter((t) =>
     (!acct || t.account_id === acct) &&
     (!month || t.date.startsWith(month)) &&
-    (!q || `${t.merchant || ""} ${t.name}`.toLowerCase().includes(q))
+    (!q || `${t.merchant || ""} ${t.name}`.toLowerCase().includes(q)) &&
+    (!cat || I.info(t).key === cat)
   );
 }
 
@@ -151,6 +181,8 @@ function renderTxns() {
     <div class="stat"><div class="label">支出</div><div class="value">${fmt(out)}</div></div>
     <div class="stat"><div class="label">退款 / 还款</div><div class="value">${fmt(inn)}</div></div>
     <div class="stat"><div class="label">笔数</div><div class="value">${list.length}</div></div>`;
+
+  renderCatBar();
 
   if (!state.items.length) {
     $("#txn-list").innerHTML = `<div class="empty">还没有连接银行。点击右上角「连接银行」开始。</div>`;
@@ -169,20 +201,32 @@ function renderTxns() {
       ${ts.map(txnRow).join("")}
     </div>`;
   }).join("");
+  // 对照表和 Plaid 都没给出域名的商户，后台按名称搜索，找到后再刷新一次列表
+  B.searchPending(() => renderTxns());
 }
 
 function txnRow(t) {
   const title = t.merchant || t.name;
   const a = state.accounts[t.account_id];
-  const logo = t.logo ? `<img src="${esc(t.logo)}" alt="" loading="lazy">` : esc(title.trim()[0] || "·");
+  const ic = I.info(t);
   const amt = t.amount > 0 ? `−${fmt(t.amount, t.currency)}` : `+${fmt(-t.amount, t.currency)}`;
+  // 左侧：有品牌 logo 就显示品牌 logo（右下角带类别小圆点），否则显示彩色类别图标
+  const srcs = [B.url(t), t.logo].filter(Boolean);
+  const brand = srcs.length
+    ? `<img class="blogo" src="${esc(srcs[0])}" ${srcs[1] ? `data-fallback="${esc(srcs[1])}"` : ""} alt="" loading="lazy"
+         referrerpolicy="strict-origin-when-cross-origin" onload="brandLoaded(this)" onerror="brandFail(this)">
+       <span class="cat-dot">${I.svg(ic.icon)}</span>`
+    : "";
   return `<div class="txn">
-    <div class="logo">${logo}</div>
+    <div class="cat-icon" style="--c:${ic.color}" title="${esc(ic.label)}${t.mcc ? " · MCC " + esc(t.mcc) : ""}">${I.svg(ic.icon)}${brand}</div>
     <div>
       <div class="title">${esc(title)}${t.pending ? '<span class="tag">待入账</span>' : ""}</div>
-      <div class="meta">${esc(a ? `${a.name}${a.mask ? " ··" + a.mask : ""}` : "")}${t.category ? " · " + esc(catName(t.category)) : ""}</div>
+      <div class="meta"><span class="cat-name" style="--c:${ic.color}">${esc(ic.label)}</span>${esc(a ? ` · ${a.name}${a.mask ? " ··" + a.mask : ""}` : "")}</div>
     </div>
-    <div class="amt ${t.amount < 0 ? "in" : ""}">${amt}</div>
+    <div class="right">
+      <div class="amt ${t.amount < 0 ? "in" : ""}">${amt}</div>
+      ${earnCell(t)}
+    </div>
   </div>`;
 }
 
@@ -250,7 +294,7 @@ function renderAccounts() {
   $("#account-list").innerHTML = state.items.map((it) => `
     <div class="card">
       <div class="inst-head">
-        <h3>${esc(it.institution)}</h3>
+        <h3 class="with-logo">${instLogo(it.institution)}${esc(it.institution)}</h3>
         <div>
           ${it.error ? `<button class="btn small primary" data-relink="${esc(it.item_id)}">重新连接</button>` : ""}
           <button class="btn small ghost" data-remove="${esc(it.item_id)}" data-name="${esc(it.institution)}">断开</button>
@@ -269,12 +313,298 @@ function renderAccounts() {
     </div>`).join("");
 }
 
+// 按类别的支出分布：一条彩色比例条 + 可点击筛选的类别标签
+function renderCatBar() {
+  const sums = new Map();
+  for (const t of filteredTxns({ ignoreCat: true })) {
+    if (t.amount <= 0) continue;
+    const ic = I.info(t);
+    if (["payment", "fee", "income"].includes(ic.key)) continue;
+    const s = sums.get(ic.key) || { ...ic, total: 0 };
+    s.total += t.amount; sums.set(ic.key, s);
+  }
+  const list = [...sums.values()].sort((a, b) => b.total - a.total);
+  const total = list.reduce((s, x) => s + x.total, 0);
+  const el = $("#cat-bar");
+  if (!total) { el.innerHTML = ""; return; }
+  el.innerHTML = `
+    <div class="cat-stack">${list.map((c) =>
+      `<i style="--c:${c.color};flex:${c.total}" title="${esc(c.label)} ${fmt(c.total)}"></i>`).join("")}</div>
+    <div class="cat-chips">${(state.catAll ? list : list.filter((c, i) => i < 8 || c.key === state.catFilter)).map((c) => `
+      <button class="cat-chip ${state.catFilter === c.key ? "on" : ""}" data-cat="${c.key}" style="--c:${c.color}">
+        <span class="dot">${I.svg(c.icon)}</span>${esc(c.label)}<b>${fmt(c.total)}</b><small>${Math.round(c.total / total * 100)}%</small>
+      </button>`).join("")}
+      ${list.length > 8 ? `<button class="cat-chip clear" data-more="1">${state.catAll ? "收起" : `更多 ${list.length - 8} 类`}</button>` : ""}
+      ${state.catFilter ? `<button class="cat-chip clear" data-cat="">清除筛选 ✕</button>` : ""}
+    </div>`;
+}
+
+// ---------------------------------------------------------------- rewards
+
+const today = () => new Date().toISOString().slice(0, 10);
+const creditAccounts = () => Object.values(state.accounts).filter((a) => a.type === "credit");
+const productOf = (a) => (Object.hasOwn(state.rewards.cards, a.id) ? state.rewards.cards[a.id] || null : R.guessProduct(a));
+const unitWord = (prog) => (R.PROGRAMS[prog].unit === "cash" ? "" : " 点");
+const fmtBal = (v, prog) => R.fmtEarned(v, R.PROGRAMS[prog].unit) + unitWord(prog);
+
+// logo：优先用 Plaid 返回的机构 logo，其次银行官网 favicon，最后是品牌色字母徽章
+function logoSources(issuer, domain) {
+  const hit = Object.entries(state.logos).find(([name, v]) => R.issuerOf(name) === issuer && v.logo);
+  const list = [];
+  if (hit) list.push(`data:image/png;base64,${hit[1].logo}`);
+  if (domain) list.push(`https://www.google.com/s2/favicons?domain=${domain}&sz=256`);
+  return list;
+}
+
+function logoHTML(issuer, domain, color, letter, cls) {
+  const [src, fallback] = logoSources(issuer, domain);
+  const img = src
+    ? `<img src="${esc(src)}" alt="${esc(issuer)}" ${fallback ? `data-fallback="${esc(fallback)}"` : ""} onerror="logoFail(this)">`
+    : "";
+  return `<span class="${cls}" style="--brand:${esc(color || "#8a8276")}">${img}<i>${esc(letter)}</i></span>`;
+}
+
+window.logoFail = (img) => {
+  if (img.dataset.fallback) { img.src = img.dataset.fallback; delete img.dataset.fallback; }
+  else img.remove();
+};
+
+function programLogo(key, cls = "plogo") {
+  const p = R.PROGRAMS[key];
+  return logoHTML(p.issuer, p.domain, p.color, p.issuer[0], cls);
+}
+
+function instLogo(institution) {
+  const issuer = R.issuerOf(institution);
+  const prog = Object.values(R.PROGRAMS).find((p) => p.issuer === issuer);
+  const color = state.logos[institution]?.color || prog?.color;
+  return logoHTML(issuer || institution, prog?.domain, color, String(institution || "?")[0], "ilogo");
+}
+
+function earnCell(t) {
+  const e = state.earn.get(t.id);
+  if (!e) return "";
+  const prog = R.PROGRAMS[e.program];
+  if (state.editing && e.cat !== "none") {
+    const v = state.draft.rates[t.id] ?? Math.round(e.rate * 100) / 100;
+    return `<label class="rate-edit" title="${esc(e.source)}">
+      <input type="number" step="0.5" min="0" inputmode="decimal" data-rate="${esc(t.id)}" value="${esc(v)}">
+      <span>${prog.unit === "cash" ? "%" : "x"}</span>
+    </label>`;
+  }
+  if (e.cat === "none" || !e.earned) return "";
+  const amt = R.fmtEarned(e.earned, prog.unit);
+  return `<div class="earn" style="--brand:${prog.color}" title="${esc(e.source)}">
+    ${e.earned > 0 ? "+" : ""}${amt}${prog.unit === "cash" ? "" : " " + prog.short}<span>${R.fmtRate(e.rate, prog.unit)}</span>
+  </div>`;
+}
+
+function renderRewards() {
+  const month = $("#r-month").value;
+  const editing = state.editing;
+  const balances = state.rewards.balances || {};
+
+  // 汇总：每个积分计划 / 每张卡
+  const progs = {};
+  const cards = {};
+  for (const a of creditAccounts()) {
+    const pk = productOf(a);
+    if (!pk) continue;
+    const prog = R.PRODUCTS[pk].program;
+    progs[prog] = progs[prog] || { month: 0, since: 0 };
+    cards[a.id] = { a, pk, prog, spend: 0, earned: 0, cats: {} };
+  }
+  for (const t of state.txns) {
+    const e = state.earn.get(t.id);
+    if (!e || e.cat === "none") continue;
+    const since = balances[e.program]?.updated;
+    if (since && t.date > since) progs[e.program].since += e.earned;
+    if (!t.date.startsWith(month)) continue;
+    progs[e.program].month += e.earned;
+    const c = cards[t.account_id];
+    if (!c) continue;
+    c.spend += t.amount; c.earned += e.earned;
+    const label = R.catLabel(e.cat);
+    c.cats[label] = (c.cats[label] || 0) + e.earned;
+  }
+
+  const keys = Object.keys(R.PROGRAMS).filter((k) => editing || progs[k] || balances[k]);
+  const [y, m] = month.split("-");
+  $("#r-note").textContent = `${y} 年 ${Number(m)} 月 · 积分按卡片倍数估算，以银行账单为准`;
+
+  $("#program-list").innerHTML = keys.length ? keys.map((k) => {
+    const p = R.PROGRAMS[k], g = progs[k] || { month: 0, since: 0 }, b = balances[k];
+    const balView = editing
+      ? `<label class="bal-edit"><span>${p.unit === "cash" ? "$" : ""}</span><input type="number" step="${p.unit === "cash" ? "0.01" : "1"}" min="0" inputmode="decimal" data-bal="${k}" value="${esc(state.draft.balances[k] ?? b?.value ?? "")}" placeholder="输入当前余额"><span>${p.unit === "cash" ? "" : "点"}</span></label>`
+      : b
+        ? `<div class="pbal">${esc(R.fmtEarned(b.value, p.unit))}<small>${unitWord(k)}</small></div>`
+        : `<div class="pbal empty-bal">—<small>右上角设置 → 更新，录入余额</small></div>`;
+    const sinceLine = b && !editing
+      ? `<div class="pmeta">余额更新于 ${esc(b.updated)}${g.since ? ` · 之后新增约 ${esc(fmtBal(g.since, k))}，估算当前 <b>${esc(fmtBal(b.value + g.since, k))}</b>` : ""}</div>`
+      : `<div class="pmeta">${editing ? "保存后记为今天的余额" : "&nbsp;"}</div>`;
+    return `<article class="program" style="--brand:${p.color}">
+      <header>${programLogo(k)}<div><div class="pname">${esc(p.name)}</div><div class="pissuer">${esc(p.issuer)}</div></div></header>
+      ${balView}
+      ${sinceLine}
+      <div class="pmonth"><span>${Number(m)} 月预估</span><b>${g.month >= 0 ? "+" : ""}${esc(fmtBal(g.month, k))}</b></div>
+    </article>`;
+  }).join("") : `<div class="empty">连接信用卡后，这里会按积分计划汇总。</div>`;
+
+  const rows = Object.values(cards).sort((x, y) => y.earned - x.earned || y.spend - x.spend);
+  $("#card-earn").innerHTML = rows.length ? `<div class="card earn-table">${rows.map((c) => {
+    const p = R.PROGRAMS[c.prog];
+    const eff = c.spend > 0 ? (c.earned / c.spend) * (p.unit === "cash" ? 100 : 1) : 0;
+    const chips = Object.entries(c.cats).sort((a, b) => b[1] - a[1]).slice(0, 4)
+      .map(([n, v]) => `<span class="chip">${esc(n)} ${esc(R.fmtEarned(v, p.unit))}</span>`).join("");
+    return `<div class="earn-row">
+      ${programLogo(c.prog, "plogo sm")}
+      <div class="er-main">
+        <div class="er-title">${esc(R.PRODUCTS[c.pk].name)}<span class="meta"> · ${esc(c.a.name)}${c.a.mask ? " ··" + esc(c.a.mask) : ""}</span></div>
+        <div class="chips">${chips || '<span class="meta">本月暂无消费</span>'}</div>
+      </div>
+      <div class="er-num">
+        <div><b>${c.earned >= 0 ? "+" : ""}${esc(fmtBal(c.earned, c.prog))}</b></div>
+        <div class="meta">消费 ${fmt(c.spend)}${c.spend > 0 ? ` · 平均 ${esc(R.fmtRate(eff, p.unit))}` : ""}</div>
+      </div>
+    </div>`;
+  }).join("")}</div>` : "";
+}
+
+function renderSettings() {
+  const accts = creditAccounts();
+  const groups = {};
+  for (const [k, p] of Object.entries(R.PRODUCTS)) (groups[p.issuer] = groups[p.issuer] || []).push([k, p]);
+  const options = (sel) => Object.entries(groups).map(([iss, list]) =>
+    `<optgroup label="${esc(iss)}">${list.map(([k, p]) =>
+      `<option value="${k}" ${k === sel ? "selected" : ""}>${esc(p.name)} · ${esc(R.PROGRAMS[p.program].short)}</option>`).join("")}</optgroup>`).join("");
+  $("#card-map").innerHTML = accts.length ? accts.map((a) => `
+    <label class="map-row">
+      <span>${esc(a.institution)} · ${esc(a.name)}${a.mask ? " ··" + esc(a.mask) : ""}</span>
+      <select data-map="${esc(a.id)}"><option value="">不计积分</option>${options(productOf(a))}</select>
+    </label>`).join("") : `<p class="hint">还没有信用卡账户</p>`;
+
+  const rules = [];
+  for (const [acct, map] of Object.entries(state.rewards.rules || {})) {
+    for (const [key, rate] of Object.entries(map)) rules.push({ acct, key, rate });
+  }
+  $("#rule-list").innerHTML = rules.length ? rules.map((r) => {
+    const a = state.accounts[r.acct];
+    const pk = a && productOf(a);
+    const unit = pk ? R.PROGRAMS[R.PRODUCTS[pk].program].unit : "pts";
+    return `<div class="rule-row">
+      <span>${esc(a ? a.name + (a.mask ? " ··" + a.mask : "") : "已断开的卡")} · ${esc(R.ruleKeyLabel(r.key))}</span>
+      <b>${esc(R.fmtRate(r.rate, unit))}</b>
+      <button class="btn small ghost" data-unrule="${esc(r.acct)}|${esc(r.key)}">删除</button>
+    </div>`;
+  }).join("") : `<p class="hint">还没有。编辑模式下改过的倍数会出现在这里。</p>`;
+}
+
+async function saveRewards(next, okMsg) {
+  const prev = state.rewards;
+  state.rewards = next; render();
+  try { await api("/api/rewards", { method: "PUT", body: { rewards: next } }); if (okMsg) toast(okMsg); return true; }
+  catch (e) { state.rewards = prev; render(); toast(e.message); return false; }
+}
+
+function setEditing(on) {
+  state.editing = on;
+  state.draft = on ? { rates: {}, balances: {} } : null;
+  $("#editbar").hidden = !on;
+  $("#btn-edit").textContent = on ? "保存" : "更新";
+  render();
+}
+
+async function saveEdit() {
+  const next = JSON.parse(JSON.stringify(state.rewards));
+  let changed = 0;
+  for (const [tid, raw] of Object.entries(state.draft.rates)) {
+    if (raw === "") continue;
+    const v = Number(raw), e = state.earn.get(tid), t = state.txns.find((x) => x.id === tid);
+    if (!e || !t || !Number.isFinite(v) || v < 0 || Math.abs(v - e.rate) < 1e-9) continue;
+    (next.rules[t.account_id] = next.rules[t.account_id] || {})[e.key] = v;
+    changed++;
+  }
+  let bal = 0;
+  for (const [k, raw] of Object.entries(state.draft.balances)) {
+    if (raw === "") { if (next.balances[k]) { delete next.balances[k]; bal++; } continue; }
+    const v = Number(raw);
+    if (!Number.isFinite(v) || v < 0) continue;
+    if (next.balances[k]?.value === v) continue;
+    next.balances[k] = { value: v, updated: today() };
+    bal++;
+  }
+  state.editing = false; state.draft = null;
+  $("#editbar").hidden = true; $("#btn-edit").textContent = "更新";
+  if (!changed && !bal) { render(); return toast("没有改动"); }
+  const parts = [];
+  if (changed) parts.push(`${changed} 条倍数已记住`);
+  if (bal) parts.push(`${bal} 个余额已更新`);
+  await saveRewards(next, `已保存：${parts.join("，")}`);
+}
+
+async function resync() {
+  const btn = $("#btn-resync");
+  if (!confirm("重新拉取所有银行的全部交易？需要一点时间。")) return;
+  btn.disabled = true; btn.textContent = "拉取中…";
+  try { ingest(await api("/api/resync", { method: "POST" })); toast("已重新拉取全部交易"); }
+  catch (e) { toast(e.message); }
+  finally { btn.disabled = false; btn.textContent = "重新拉取全部交易"; }
+}
+
+function toggleSettings(open) {
+  const panel = $("#settings"), btn = $("#btn-settings");
+  const show = open ?? panel.hidden;
+  panel.hidden = !show;
+  btn.setAttribute("aria-expanded", String(show));
+}
+
+function bindRewards() {
+  $("#r-month").addEventListener("input", renderRewards);
+  $("#btn-settings").addEventListener("click", (e) => { e.stopPropagation(); toggleSettings(); });
+  document.addEventListener("click", (e) => {
+    if (!$("#settings").hidden && !e.target.closest(".settings-wrap")) toggleSettings(false);
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape") return;
+    if (!$("#settings").hidden) toggleSettings(false);
+    else if (state.editing) setEditing(false);
+  });
+  $("#btn-edit").addEventListener("click", () => { toggleSettings(false); state.editing ? saveEdit() : setEditing(true); });
+  $("#btn-edit-save").addEventListener("click", saveEdit);
+  $("#btn-edit-cancel").addEventListener("click", () => setEditing(false));
+  $("#btn-resync").addEventListener("click", resync);
+
+  document.addEventListener("input", (e) => {
+    const el = e.target;
+    if (el.dataset.rate && state.draft) state.draft.rates[el.dataset.rate] = el.value;
+    if (el.dataset.bal && state.draft) state.draft.balances[el.dataset.bal] = el.value;
+  });
+  document.addEventListener("change", (e) => {
+    const el = e.target;
+    if (!el.dataset.map) return;
+    const next = JSON.parse(JSON.stringify(state.rewards));
+    next.cards[el.dataset.map] = el.value;
+    saveRewards(next, "卡片对应已更新");
+  });
+  document.addEventListener("click", (e) => {
+    const b = e.target.closest("[data-unrule]");
+    if (!b) return;
+    const [acct, ...rest] = b.dataset.unrule.split("|");
+    const key = rest.join("|");
+    const next = JSON.parse(JSON.stringify(state.rewards));
+    if (next.rules[acct]) { delete next.rules[acct][key]; if (!Object.keys(next.rules[acct]).length) delete next.rules[acct]; }
+    saveRewards(next, "已删除，恢复按卡片默认倍数");
+  });
+}
+
 // ---------------------------------------------------------------- ui
 
 // ---------------------------------------------------------------- login
 
 function showLogin(msg) {
   state.items = []; state.txns = []; state.benefits = []; state.accounts = {};
+  state.rewards = EMPTY_REWARDS(); state.earn = new Map(); state.logos = {};
+  state.editing = false; state.draft = null; $("#editbar").hidden = true;
   $("#app").hidden = true;
   $("#login").hidden = false;
   const err = $("#login-err");
@@ -335,6 +665,14 @@ function bind() {
   $("#btn-logout").addEventListener("click", logout);
   $("#login-form").addEventListener("submit", doLogin);
   ["#f-account", "#f-month", "#f-q"].forEach((s) => $(s).addEventListener("input", renderTxns));
+  bindRewards();
+  $("#cat-bar").addEventListener("click", (e) => {
+    if (e.target.closest("[data-more]")) { state.catAll = !state.catAll; return renderCatBar(); }
+    const b = e.target.closest("[data-cat]");
+    if (!b) return;
+    state.catFilter = state.catFilter === b.dataset.cat ? "" : b.dataset.cat;
+    renderTxns();
+  });
 
   $("#benefit-form").addEventListener("submit", (e) => {
     e.preventDefault();
@@ -355,6 +693,7 @@ function bind() {
 
 bind();
 $("#f-month").value = new Date().toISOString().slice(0, 7);
+$("#r-month").value = $("#f-month").value;
 render();
 if (cfg.token) {
   showApp();

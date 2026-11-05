@@ -32,24 +32,65 @@
     <div class="actions">
       <button id="btn-sync" class="btn">同步</button>
       <button id="btn-link" class="btn primary">连接银行</button>
+      <div class="settings-wrap">
+        <button id="btn-settings" class="btn icon" aria-label="设置" aria-expanded="false" title="设置">
+          <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" d="M12 15.2a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4Z"/><path fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" d="M19.4 13.5a7.6 7.6 0 0 0 0-3l2-1.6-2-3.4-2.4 1a7.5 7.5 0 0 0-2.6-1.5L14 2.5h-4l-.4 2.5A7.5 7.5 0 0 0 7 6.5l-2.4-1-2 3.4 2 1.6a7.6 7.6 0 0 0 0 3l-2 1.6 2 3.4 2.4-1a7.5 7.5 0 0 0 2.6 1.5l.4 2.5h4l.4-2.5a7.5 7.5 0 0 0 2.6-1.5l2.4 1 2-3.4-2-1.6Z"/></svg>
+        </button>
+        <div id="settings" class="settings" hidden>
+          <section>
+            <h4>积分与余额</h4>
+            <p class="hint">点「更新」进入编辑：每笔交易的倍数、各计划余额都可以直接改；再点一次保存。改过的倍数会按 MCC（没有 MCC 时按商户名）记住，同一张卡的同类交易一起更新。</p>
+            <button id="btn-edit" class="btn primary wide">更新</button>
+          </section>
+          <section>
+            <h4>卡片对应</h4>
+            <p class="hint">决定每张卡用哪套倍数。已按账户名自动识别，不对的话在这里改。</p>
+            <div id="card-map"></div>
+          </section>
+          <section>
+            <h4>已记住的倍数</h4>
+            <div id="rule-list"></div>
+          </section>
+          <section>
+            <h4>数据</h4>
+            <p class="hint">旧交易没有存 MCC。重新拉取一次全部交易即可补齐（不额外计费）。</p>
+            <button id="btn-resync" class="btn wide">重新拉取全部交易</button>
+          </section>
+        </div>
+      </div>
       <button id="btn-logout" class="btn ghost">退出</button>
     </div>
   </header>
 
   <nav class="tabs" role="tablist">
-    <button data-tab="txns" class="active">交易</button>
+    <button data-tab="rewards" class="active">积分</button>
+    <button data-tab="txns">交易</button>
     <button data-tab="benefits">权益任务</button>
     <button data-tab="accounts">账户</button>
   </nav>
 
   <main>
-    <section id="tab-txns" class="tab active">
+    <section id="tab-rewards" class="tab active">
+      <div class="rewards-head">
+        <div>
+          <h2>积分总览</h2>
+          <p class="hint" id="r-note"></p>
+        </div>
+        <input type="month" id="r-month" class="month">
+      </div>
+      <div id="program-list" class="programs"></div>
+      <h3 class="section-title">本月各卡</h3>
+      <div id="card-earn"></div>
+    </section>
+
+    <section id="tab-txns" class="tab">
       <div class="summary" id="summary"></div>
       <div class="filters">
         <select id="f-account"><option value="">全部卡片</option></select>
         <input type="month" id="f-month">
         <input type="search" id="f-q" placeholder="搜索商户 / 描述">
       </div>
+      <div id="cat-bar" class="cat-bar"></div>
       <div id="txn-list"></div>
     </section>
 
@@ -86,8 +127,18 @@
   </main>
   </div>
 
+  <div id="editbar" class="editbar" hidden>
+    <span><b>编辑中</b> · 改交易倍数或积分余额，完成后保存</span>
+    <span class="editbar-actions">
+      <button id="btn-edit-cancel" class="btn ghost">取消</button>
+      <button id="btn-edit-save" class="btn primary">保存</button>
+    </span>
+  </div>
   <div id="toast" role="status"></div>
   <script src="config.js"></script>
+  <script src="icons.js"></script>
+  <script src="brands.js"></script>
+  <script src="rewards.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
