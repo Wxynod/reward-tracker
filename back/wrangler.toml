@@ -1,0 +1,20 @@
+name = "reward-tracker"
+main = "src/index.js"
+compatibility_date = "2026-11-01"
+
+[vars]
+# sandbox：先用测试账号（user_good / pass_good）跑通流程；跑通后改成 production 连真实卡片
+# 注意：sandbox 和 production 的 access_token 不通用，切换后需要重新连接银行
+PLAID_ENV = "sandbox"
+# 允许访问 Worker 的前端地址，逗号分隔（换成你的 GitHub Pages 域名）
+ALLOWED_ORIGINS = "https://wxynod.github.io,http://localhost:8000"
+# 可选：走 OAuth 的银行（如 Chase）需要。填前端完整地址（如 https://xxx.github.io/repo/），
+# 并在 Plaid Dashboard → API → Allowed redirect URIs 里登记同一个地址
+PLAID_REDIRECT_URI = ""
+
+[[kv_namespaces]]
+binding = "DB"
+id = "REPLACE_WITH_KV_NAMESPACE_ID"
+
+# 机密信息用 wrangler secret put 设置，不要写在这里：
+#   PLAID_CLIENT_ID / PLAID_SECRET / APP_USERNAME / APP_PASSWORD / SESSION_SECRET

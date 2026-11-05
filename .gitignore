@@ -1,0 +1,5 @@
+Credentials*
+Plaid_credentials*
+back/.dev.vars
+back/node_modules/
+back/.wrangler/

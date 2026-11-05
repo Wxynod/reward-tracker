@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>记账本 · Reward Tracker</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"></script>
+</head>
+<body>
+  <section id="login" class="login" hidden>
+    <form id="login-form" class="login-card">
+      <h1>记账本</h1>
+      <p class="sub">Reward Tracker</p>
+      <label>账号<input name="username" autocomplete="username" required autofocus></label>
+      <label>密码<input name="password" type="password" autocomplete="current-password" required></label>
+      <p class="err" id="login-err" hidden></p>
+      <button class="btn primary" type="submit">登录</button>
+    </form>
+  </section>
+
+  <div id="app" hidden>
+  <header class="masthead">
+    <div class="brand">
+      <h1>记账本</h1>
+      <span class="sub">Reward Tracker</span>
+      <span id="env-badge" class="badge" hidden></span>
+    </div>
+    <div class="actions">
+      <button id="btn-sync" class="btn">同步</button>
+      <button id="btn-link" class="btn primary">连接银行</button>
+      <button id="btn-logout" class="btn ghost">退出</button>
+    </div>
+  </header>
+
+  <nav class="tabs" role="tablist">
+    <button data-tab="txns" class="active">交易</button>
+    <button data-tab="benefits">权益任务</button>
+    <button data-tab="accounts">账户</button>
+  </nav>
+
+  <main>
+    <section id="tab-txns" class="tab active">
+      <div class="summary" id="summary"></div>
+      <div class="filters">
+        <select id="f-account"><option value="">全部卡片</option></select>
+        <input type="month" id="f-month">
+        <input type="search" id="f-q" placeholder="搜索商户 / 描述">
+      </div>
+      <div id="txn-list"></div>
+    </section>
+
+    <section id="tab-benefits" class="tab">
+      <div id="benefit-list"></div>
+      <details class="card" id="benefit-editor">
+        <summary>＋ 新增权益任务</summary>
+        <form id="benefit-form" class="form">
+          <label>名称<input name="name" required placeholder="例：Amex Gold Uber Cash / 开卡消费 $4,000"></label>
+          <label>卡片<select name="account_id"><option value="">任意卡片</option></select></label>
+          <div class="row">
+            <label>类型
+              <select name="type">
+                <option value="spend">消费金额</option>
+                <option value="count">消费笔数</option>
+              </select>
+            </label>
+            <label>目标<input name="target" type="number" step="0.01" min="0" required placeholder="4000"></label>
+          </div>
+          <label>商户关键词<input name="keywords" placeholder="可选，逗号分隔，例：uber, lyft"></label>
+          <div class="row">
+            <label>开始<input name="start" type="date" required></label>
+            <label>截止<input name="end" type="date" required></label>
+          </div>
+          <label>备注<input name="note" placeholder="可选"></label>
+          <button class="btn primary" type="submit">保存</button>
+        </form>
+      </details>
+    </section>
+
+    <section id="tab-accounts" class="tab">
+      <div id="account-list"></div>
+    </section>
+  </main>
+  </div>
+
+  <div id="toast" role="status"></div>
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
