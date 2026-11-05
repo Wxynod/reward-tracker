@@ -518,3 +518,73 @@ body.editing main { padding-bottom: 120px; }
 .mix { display: flex; height: 14px; border-radius: 4px; overflow: hidden; gap: 2px; margin-bottom: 8px; }
 .mix b { display: block; min-width: 3px; }
 .tag.bonus { color: var(--jade); border-color: rgba(47, 107, 85, .35); margin-left: 4px; font-size: 10px; }
+
+/* ------------------------------------------------ accounts: credit limit */
+.acct { flex-wrap: wrap; }
+.limit { flex-basis: 100%; margin-top: 6px; }
+.limit-track { position: relative; height: 6px; background: #efe9df; border-radius: 3px; overflow: visible; }
+.limit-track i { display: block; height: 100%; border-radius: 3px; background: var(--jade); }
+.limit.mid .limit-track i { background: #c98500; }
+.limit.high .limit-track i { background: var(--seal); }
+.limit-track .mark { position: absolute; left: 30%; top: -2px; width: 1px; height: 10px; background: #b8ae9f; }
+.limit-nums { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); margin-top: 3px; font-variant-numeric: tabular-nums; }
+.limit.high .limit-nums span:first-child { color: var(--seal); }
+
+/* ------------------------------------------------ points: period table + drill */
+.period-table { padding: 6px 14px 10px; overflow-x: auto; }
+.period-table table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: 14px; }
+.period-table th, .period-table td { padding: 9px 8px; border-bottom: 1px dashed var(--line); text-align: right; white-space: nowrap; }
+.period-table thead th { font-weight: 600; font-size: 13px; color: var(--ink); }
+.period-table thead th small { display: block; font-weight: 400; color: var(--muted); font-size: 11px; }
+.period-table tbody th { text-align: left; font-weight: 500; display: flex; align-items: center; gap: 10px; }
+.period-table td.zero { color: var(--muted); }
+.period-table tr:last-child th, .period-table tr:last-child td { border-bottom: none; }
+.plogo.xs { width: 26px; height: 26px; border-radius: 7px; }
+.plogo.xs i { font-size: 11px; }
+.period-table .hint { margin-top: 6px; }
+.points-drill { padding: 14px 18px; }
+.prog-seg { margin-bottom: 10px; flex-wrap: wrap; }
+
+/* ------------------------------------------------ drill chart */
+.drill { position: relative; }
+.drill-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; flex-wrap: wrap; }
+.drill-up {
+  width: 30px; height: 30px; border-radius: 8px; border: 1px solid var(--line); background: var(--card);
+  display: grid; place-items: center; cursor: pointer; color: var(--ink); flex: none;
+}
+.drill-up:hover:not(:disabled) { border-color: var(--ink); }
+.drill-up:disabled { opacity: .35; cursor: default; }
+.crumbs { display: flex; align-items: center; gap: 4px; font-size: 14px; flex-wrap: wrap; }
+.crumbs button { border: none; background: none; padding: 2px 4px; cursor: pointer; color: var(--muted); border-radius: 4px; }
+.crumbs button:hover { color: var(--ink); background: var(--paper); }
+.crumbs span { color: var(--line); }
+.drill-total { margin-left: auto; font-weight: 700; font-variant-numeric: tabular-nums; }
+.drill-pick {
+  display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); background: var(--card);
+  border-radius: 8px; padding: 4px 10px; cursor: pointer; font-size: 13px;
+}
+.drill-pick:hover { border-color: var(--ink); }
+.drill-hint { color: var(--muted); font-size: 11px; margin: 4px 0 0; }
+.chart .drillable { cursor: zoom-in; }
+.chart .drillable .hit { cursor: zoom-in; }
+.chart .tick.future { opacity: .5; }
+
+.picker {
+  position: absolute; right: 0; top: 40px; z-index: 30; width: min(460px, 100%);
+  background: var(--card); border: 1px solid var(--line); border-top: 3px solid var(--seal); border-radius: 10px;
+  box-shadow: 0 18px 40px rgba(31, 28, 24, .16); padding: 12px;
+}
+.picker[hidden] { display: none; }
+.picker-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.picker-all { border: 1px solid var(--line); background: var(--card); border-radius: 8px; padding: 3px 12px; cursor: pointer; }
+.picker-close { margin-left: auto; border: none; background: none; cursor: pointer; color: var(--muted); font-size: 14px; }
+.picker-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 6px; max-height: 280px; overflow: auto; }
+.pick {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 1px; text-align: left;
+  border: 1px solid var(--line); background: #fff; border-radius: 8px; padding: 6px 10px; cursor: pointer; font-size: 13px;
+}
+.pick small { color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.pick:hover { border-color: var(--ink); }
+.pick.on { border-color: var(--seal); background: color-mix(in srgb, var(--seal) 6%, #fff); }
+.an-scope { font-size: 12px; color: var(--muted); align-self: center; }
+.an-scope b { color: var(--ink); }

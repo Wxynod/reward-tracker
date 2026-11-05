@@ -9,7 +9,8 @@
   const NO_SPEND = new Set(["LOAN_PAYMENTS", "TRANSFER_IN", "TRANSFER_OUT", "INCOME", "BANK_FEES"]);
   const WEEK = ["一", "二", "三", "四", "五", "六", "日"];
 
-  const ui = { card: "", range: "180", grain: "week", group: "card", single: "" };
+  const ui = { card: "", group: "card", single: "", node: { lv: "year", k: String(new Date().getFullYear()) } };
+  const D = window.RT_DRILL;
 
   // 消费大类：8 个固定分组，颜色跟着分组走（不按排名换色），顺序即堆叠顺序
   const GROUPS = [
@@ -77,17 +78,17 @@
 
     const today = iso(new Date());
     const all = spendTxns();
-    const from = ui.range === "all"
-      ? (all.length ? all.reduce((m, t) => (t.date < m ? t.date : m), today) : today)
-      : addDays(today, -Number(ui.range) + 1);
-    const inRange = all.filter((t) => t.date >= from && t.date <= today);
+    // 时间范围 = 下钻图当前所在的节点（全部 / 某年 / 某季 / 某月 / 某周）
+    const minDate = all.length ? all.reduce((m, t) => (t.date < m ? t.date : m), today) : today;
+    const [from, rangeEnd] = D.range(ui.node, minDate);
+    const to = rangeEnd < today ? rangeEnd : today;
+    const inRange = all.filter((t) => t.date >= from && t.date <= to);
 
     root.innerHTML = `
       <div class="an-filters">
         <select id="an-card"><option value="">全部卡片</option>${cards.map((c) =>
           `<option value="${esc(c.id)}" ${c.id === ui.card ? "selected" : ""}>${esc(c.label)}</option>`).join("")}</select>
-        <select id="an-range">${[["30", "近 30 天"], ["90", "近 3 个月"], ["180", "近 6 个月"], ["365", "近 12 个月"], ["all", "全部"]].map(([v, l]) =>
-          `<option value="${v}" ${v === ui.range ? "selected" : ""}>${l}</option>`).join("")}</select>
+        <span class="an-scope">当前范围：<b>${esc(D.label(ui.node, true))}</b> · 下面所有图表都按这个范围统计，在「消费趋势」里下钻或「选择时间」切换</span>
       </div>
       ${kpis(all, today)}
       <section class="an-card">
@@ -96,24 +97,23 @@
           <div class="seg-row">
           <div class="seg" role="tablist" aria-label="分组">${[["card", "按卡"], ["cat", "按类别"]].map(([v, l]) =>
             `<button data-group="${v}" class="${v === ui.group ? "on" : ""}">${l}</button>`).join("")}</div>
-          <div class="seg" role="tablist" aria-label="时间粒度">${[["day", "日"], ["week", "周"], ["month", "月"], ["quarter", "季"]].map(([v, l]) =>
-            `<button data-grain="${v}" class="${v === ui.grain ? "on" : ""}">${l}</button>`).join("")}</div>
           </div>
         </div>
-        ${trend(inRange, from, today, cards)}
+        ${trend(all, cards)}
       </section>
-      <section class="an-card">${catMatrix(inRange, from, today)}</section>
+      <section class="an-card">${catMatrix(inRange, minDate)}</section>
       <div class="an-grid">
         <section class="an-card">${byCard(inRange, cards)}</section>
         <section class="an-card">${byCategory(inRange)}</section>
       </div>
-      <section class="an-card single">${singleCard(cards, from, today)}</section>
+      <section class="an-card single">${singleCard(cards, from, to)}</section>
       <div class="an-grid">
-        <section class="an-card">${weekday(inRange, from, today)}</section>
+        <section class="an-card">${weekday(inRange, from, to)}</section>
         <section class="an-card">${merchants(inRange)}</section>
       </div>
       <section class="an-card">${calendar(all, today)}</section>
       <section class="an-card">${biggest(inRange, cards)}</section>`;
+    D.bind(root, "an", (n) => { ui.node = n; render(); });
   }
 
   // ------------------------------------------------------------ KPI
@@ -142,67 +142,14 @@
   }
 
   // ------------------------------------------------------------ 趋势：堆叠柱（按卡）+ 日视图的 7 日均线
-  function trend(list, from, today, cards) {
-    const g = ui.grain;
-    let start = bucketOf(from, g);
-    if (g === "day" && ui.range !== "30" && ui.range !== "90") start = bucketOf(addDays(today, -89), g); // 日视图最多 90 天
-    const end = bucketOf(today, g);
-    const keys = [];
-    for (let b = start; b <= end && keys.length < 400; b = nextBucket(b, g)) keys.push(b);
+  function trend(all, cards) {
     const series = ui.group === "cat" ? GROUPS : ui.card ? cards.filter((c) => c.id === ui.card) : cards;
     const keyOf = ui.group === "cat" ? groupOf : (t) => t.account_id;
-    const data = keys.map((k) => ({ k, total: 0, by: Object.fromEntries(series.map((c) => [c.id, 0])) }));
-    const idx = new Map(keys.map((k, i) => [k, i]));
-    for (const t of list) {
-      const i = idx.get(bucketOf(t.date, g));
-      const k = keyOf(t);
-      if (i == null || data[i].by[k] == null) continue;
-      data[i].by[k] += t.amount; data[i].total += t.amount;
-    }
-    if (!data.some((d) => d.total)) return `<div class="empty small">这段时间没有消费</div>`;
-
-    const W = 760, H = 250, L = 52, Rm = 10, T = 12, B = 28;
-    const pw = W - L - Rm, ph = H - T - B;
-    const max = niceMax(Math.max(...data.map((d) => d.total), 1));
-    const y = (v) => T + ph - (Math.max(0, v) / max) * ph;
-    const step = pw / data.length, bw = Math.max(2, Math.min(36, step * 0.68));
-    const grid = [0, 0.25, 0.5, 0.75, 1].map((f) => {
-      const v = max * f, yy = y(v);
-      return `<line x1="${L}" x2="${W - Rm}" y1="${yy}" y2="${yy}" class="grid${f === 0 ? " base" : ""}"/><text x="${L - 8}" y="${yy + 4}" class="tick" text-anchor="end">${short(v)}</text>`;
-    }).join("");
-    const every = Math.ceil(data.length / 8);
-    const xlabels = data.map((d, i) => (i % every === 0 || i === data.length - 1) && !(i !== data.length - 1 && data.length - 1 - i < every / 2)
-      ? `<text x="${L + step * i + step / 2}" y="${H - 8}" class="tick" text-anchor="middle">${bucketLabel(d.k, g)}</text>` : "").join("");
-    const bars = data.map((d, i) => {
-      const x = L + step * i + (step - bw) / 2;
-      let acc = 0;
-      const segs = series.map((c) => {
-        const v = Math.max(0, d.by[c.id]);
-        if (!v) return "";
-        const y1 = y(acc + v), y0 = y(acc); acc += v;
-        return `<rect x="${x.toFixed(1)}" y="${y1.toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(0.5, y0 - y1).toFixed(1)}" fill="${c.color}" class="seg-rect"/>`;
-      }).join("");
-      const tip = `${bucketLabel(d.k, g, true)}|合计 ${money(d.total)}|` +
-        series.filter((c) => d.by[c.id]).sort((a, b) => d.by[b.id] - d.by[a.id]).map((c) => `${c.color}~${c.label}~${money(d.by[c.id])}`).join("|");
-      return `<g class="col">${segs}<rect x="${(L + step * i).toFixed(1)}" y="${T}" width="${step.toFixed(1)}" height="${ph}" class="hit" data-tip="${esc(tip)}"/></g>`;
-    }).join("");
-    let line = "";
-    if (g === "day" && data.length >= 7) {
-      const pts = data.map((d, i) => {
-        if (i < 6) return null;
-        const avg = data.slice(i - 6, i + 1).reduce((s, x) => s + x.total, 0) / 7;
-        return `${(L + step * i + step / 2).toFixed(1)},${y(avg).toFixed(1)}`;
-      }).filter(Boolean);
-      line = `<polyline points="${pts.join(" ")}" class="avg-line"/>`;
-    }
-    const avg = data.reduce((s, d) => s + d.total, 0) / data.length;
-    const legend = `<div class="legend">${series.length > 1 ? series.map((c) => `<span><i style="background:${c.color}"></i>${esc(c.label)}</span>`).join("") : ""}
-      ${line ? `<span><i class="line"></i>7 日平均</span>` : ""}<span class="muted">平均每${{ day: "天", week: "周", month: "月", quarter: "季" }[g]} ${money(avg)}</span></div>`;
-    const table = `<details class="an-table"><summary>数据表</summary><div class="tbl-wrap"><table>
-      <thead><tr><th>${{ day: "日期", week: "周", month: "月份", quarter: "季度" }[g]}</th><th>合计</th>${series.length > 1 ? series.map((c) => `<th>${esc(c.label)}</th>`).join("") : ""}</tr></thead>
-      <tbody>${data.slice().reverse().filter((d) => d.total).map((d) => `<tr><td>${bucketLabel(d.k, g, true)}</td><td>${money(d.total)}</td>${series.length > 1 ? series.map((c) => `<td>${d.by[c.id] ? money(d.by[c.id]) : "—"}</td>`).join("") : ""}</tr>`).join("")}</tbody>
-    </table></div></details>`;
-    return `${legend}<svg viewBox="0 0 ${W} ${H}" class="chart" role="img" aria-label="消费趋势">${grid}${bars}${line}${xlabels}</svg>${table}`;
+    return D.chart({
+      id: "an", node: ui.node, series,
+      entries: all.map((t) => ({ date: t.date, s: keyOf(t), v: t.amount })),
+      fmt: money, short,
+    });
   }
 
   // 最大值取「整齐的刻度 × 4」，这样 4 条网格线都是整数
@@ -341,22 +288,13 @@
   }
 
   // ------------------------------------------------------------ 分类 × 时间：热力表（跟随上面的日 / 周 / 月 / 季）
-  function catMatrix(list, from, today) {
-    const g = ui.grain;
-    const n = { day: 14, week: 12, month: 12, quarter: 8 }[g];
-    const keys = [];
-    let b = bucketOf(today, g);
-    const first = bucketOf(from, g);
-    for (let i = 0; i < n && b >= first; i++) {
-      keys.unshift(b);
-      if (g === "day") b = addDays(b, -1);
-      else if (g === "week") b = addDays(b, -7);
-      else if (g === "month") { let y = +b.slice(0, 4), m = +b.slice(5, 7) - 1; if (!m) { m = 12; y--; } b = `${y}-${String(m).padStart(2, "0")}`; }
-      else { let y = +b.slice(0, 4), q = +b.slice(6) - 1; if (!q) { q = 4; y--; } b = `${y}-Q${q}`; }
-    }
+  function catMatrix(list, minDate) {
+    const { lv, keys } = D.children(ui.node, minDate);
+    const g = lv;
+    const bucketLabel2 = (k, gg, long) => D.label({ lv: gg, k }, long);
     const cell = {}, rowTot = {}, colTot = {};
     for (const t of list) {
-      const k = bucketOf(t.date, g);
+      const k = D.bucket(t.date, g);
       if (!keys.includes(k)) continue;
       const gr = groupOf(t);
       cell[`${gr}|${k}`] = (cell[`${gr}|${k}`] || 0) + t.amount;
@@ -369,21 +307,22 @@
     const q = (p) => vals[Math.min(vals.length - 1, Math.floor(p * vals.length))];
     const cuts = [q(0.3), q(0.55), q(0.8), q(0.95)];
     const shade = (v) => (v <= 0 ? "" : `background:${HEAT[cuts.filter((c) => v > c).length]};${cuts.filter((c) => v > c).length >= 3 ? "color:#fff;" : ""}`);
-    const unit = { day: "天", week: "周", month: "月", quarter: "季" }[g];
+    const unit = { day: "天", month: "月", quarter: "季", year: "年" }[g];
     // 每类在最近一期 vs 前几期平均的变化，找出异常
-    const last = keys[keys.length - 1], prev = keys.slice(0, -1);
+    const past = keys.filter((k) => (g === "day" ? k : D.range({ lv: g, k })[0]) <= D.today());
+    const last = past[past.length - 1], prev = past.slice(0, -1);
     const movers = rows.map((gr) => {
       const now = cell[`${gr.id}|${last}`] || 0;
       const base = prev.length ? prev.reduce((s, k) => s + (cell[`${gr.id}|${k}`] || 0), 0) / prev.length : 0;
       return { gr, now, base, d: now - base };
     }).filter((m) => m.base > 0 || m.now > 0).sort((a, c) => Math.abs(c.d) - Math.abs(a.d)).slice(0, 3);
     return `<h3>分类 × 时间</h3>
-      <p class="an-sub">每${unit}各大类花了多少，颜色越深越多 · 跟随上方的「日 / 周 / 月 / 季」</p>
+      <p class="an-sub">每${unit}各大类花了多少，颜色越深越多 · 跟随「消费趋势」当前所在的层级</p>
       <div class="tbl-wrap matrix-wrap"><table class="matrix">
-        <thead><tr><th></th>${keys.map((k) => `<th>${bucketLabel(k, g)}</th>`).join("")}<th>合计</th></tr></thead>
+        <thead><tr><th></th>${keys.map((k) => `<th>${bucketLabel2(k, g)}</th>`).join("")}<th>合计</th></tr></thead>
         <tbody>${rows.map((gr) => `<tr><th><i style="background:${gr.color}"></i>${gr.label}</th>${keys.map((k) => {
           const v = cell[`${gr.id}|${k}`] || 0;
-          return `<td style="${shade(v)}" ${v ? `data-tip="${esc(`${gr.label} · ${bucketLabel(k, g, true)}|${money(v)}|占当期 ${colTot[k] ? (v / colTot[k] * 100).toFixed(0) : 0}%`)}"` : ""}>${v ? short(v) : "·"}</td>`;
+          return `<td style="${shade(v)}" ${v ? `data-tip="${esc(`${gr.label} · ${bucketLabel2(k, g, true)}|${money(v)}|占当期 ${colTot[k] ? (v / colTot[k] * 100).toFixed(0) : 0}%`)}"` : ""}>${v ? short(v) : "·"}</td>`;
         }).join("")}<td class="tot">${money(rowTot[gr.id])}</td></tr>`).join("")}
         <tr class="sum"><th>合计</th>${keys.map((k) => `<td>${colTot[k] ? short(colTot[k]) : "·"}</td>`).join("")}<td class="tot">${money(Object.values(rowTot).reduce((s, v) => s + v, 0))}</td></tr></tbody>
       </table></div>
@@ -515,12 +454,9 @@
     const root = document.getElementById("analytics");
     root.addEventListener("change", (e) => {
       if (e.target.id === "an-card") { ui.card = e.target.value; render(); }
-      if (e.target.id === "an-range") { ui.range = e.target.value; render(); }
       if (e.target.id === "an-single") { ui.single = e.target.value; render(); }
     });
     root.addEventListener("click", (e) => {
-      const b = e.target.closest("[data-grain]");
-      if (b) { ui.grain = b.dataset.grain; render(); }
       const gb = e.target.closest("[data-group]");
       if (gb) { ui.group = gb.dataset.group; render(); }
     });

@@ -154,7 +154,18 @@ async function removeItem(itemId, name) {
 const fmt = (n, cur = "USD") =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: cur || "USD" }).format(n);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-const acctLabel = (a) => (a ? `${a.institution} · ${a.name}${a.mask ? " ··" + a.mask : ""}` : "未知账户");
+// 卡片显示名：认出（或手动选了）卡型就用卡名，例如 Chase 的「CREDIT CARD」显示成「Freedom Flex」
+function cardName(a) {
+  if (!a) return "";
+  const full = state.accounts[a.id] || a;
+  if (full.type === "credit") {
+    const pk = productOf(full);
+    if (pk && !/_other$/.test(pk)) return R.PRODUCTS[pk].name;
+  }
+  return full.name;
+}
+const cardNameMask = (a) => (a ? `${cardName(a)}${a.mask ? " ··" + a.mask : ""}` : "");
+const acctLabel = (a) => (a ? `${a.institution} · ${cardNameMask(a)}` : "未知账户");
 const WEEK = ["日", "一", "二", "三", "四", "五", "六"];
 
 function render() {
@@ -244,7 +255,7 @@ function txnRow(t) {
     <div class="cat-icon" style="--c:${ic.color}" title="${esc(ic.label)}${t.mcc ? " · MCC " + esc(t.mcc) : ""}">${I.svg(ic.icon)}${brand}</div>
     <div>
       <div class="title">${esc(title)}${t.pending ? '<span class="tag">待入账</span>' : ""}</div>
-      <div class="meta"><span class="cat-name" style="--c:${ic.color}">${esc(ic.label)}</span>${a ? esc(` · ${a.name}${a.mask ? " ··" + a.mask : ""}`) : ' · <span class="warn" title="这笔交易的账户不在当前账户列表里，点 ⚙ → 重新拉取全部交易">未知账户</span>'}</div>
+      <div class="meta"><span class="cat-name" style="--c:${ic.color}">${esc(ic.label)}</span>${a ? esc(` · ${cardNameMask(a)}`) : ' · <span class="warn" title="这笔交易的账户不在当前账户列表里，点 ⚙ → 重新拉取全部交易">未知账户</span>'}</div>
     </div>
     <div class="right">
       <div class="amt ${t.amount < 0 ? "in" : ""}">${amt}</div>
@@ -298,7 +309,7 @@ function rotationCards(today) {
         <h3>${esc(product.name)} · ${esc(r.rotation.title)}</h3>
         <span class="tag auto-tag">自动</span>
       </div>
-      <div class="meta">${esc(a.name)}${a.mask ? " ··" + esc(a.mask) : ""} · ${esc(r.from)} 至 ${esc(r.to)}${actLeft >= 0 ? ` · 记得在 ${esc(r.rotation.activateBy)} 前激活` : ""}</div>
+      <div class="meta">${esc(cardNameMask(a))} · ${esc(r.from)} 至 ${esc(r.to)}${actLeft >= 0 ? ` · 记得在 ${esc(r.rotation.activateBy)} 前激活` : ""}</div>
       <div class="bar"><i style="width:${pct.toFixed(1)}%"></i></div>
       <div class="nums"><span>${fmt(used)} / ${fmt(r.cap)}</span><span class="left">${done ? "额度已用满" : `还差 ${fmt(r.cap - used)} · 剩 ${daysLeft} 天`}</span></div>
       <ul class="rotation-items">${r.rotation.items.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>
@@ -329,7 +340,7 @@ function brilliantCreditCards(today) {
         <h3>Brilliant 每月 $25 餐饮报销 · ${m} 月</h3>
         <span class="tag auto-tag">自动</span>
       </div>
-      <div class="meta">${esc(a.name)}${a.mask ? " ··" + esc(a.mask) : ""} · 每个自然月用这张卡在餐厅消费，报销最多 $25 · ${ym}-01 至 ${monthEnd}</div>
+      <div class="meta">${esc(cardNameMask(a))} · 每个自然月用这张卡在餐厅消费，报销最多 $25 · ${ym}-01 至 ${monthEnd}</div>
       <div class="bar"><i style="width:${pct.toFixed(1)}%"></i></div>
       <div class="nums"><span>${fmt(used)} / ${fmt(DINING_CREDIT)}</span><span class="left">${esc(status)}</span></div>
       ${dining.length ? `<ul class="rotation-items">${dining.slice(0, 5).map((t) => `<li>${+t.date.slice(5, 7)}/${+t.date.slice(8)} ${esc(t.merchant || t.name)} · ${fmt(t.amount)}</li>`).join("")}</ul>`
@@ -388,14 +399,19 @@ function renderAccounts() {
         </div>
       </div>
       ${it.error ? `<div class="err">${esc(it.error.code)}：${esc(it.error.message)}</div>` : ""}
-      ${it.accounts.map((a) => `
+      ${it.accounts.map((a) => {
+        const name = cardName(a);
+        const sub = name !== a.name ? a.name : (a.official_name || a.subtype || "");
+        return `
         <div class="acct">
-          <div><div>${esc(a.name)}${a.mask ? " ··" + esc(a.mask) : ""}</div><div class="meta">${esc(a.official_name || a.subtype || "")}</div></div>
+          <div><div>${esc(name)}${a.mask ? " ··" + esc(a.mask) : ""}</div><div class="meta">${esc(sub)}</div></div>
           <div style="text-align:right">
             <div>${a.balance_current != null ? fmt(a.balance_current, a.currency) : "—"}</div>
             <div class="meta">${a.limit ? "额度 " + fmt(a.limit, a.currency) : ""}</div>
           </div>
-        </div>`).join("")}
+          ${a.type === "credit" && a.limit ? limitBar(a) : ""}
+        </div>`;
+      }).join("")}
       <div class="hint" style="margin-top:8px">上次同步：${it.last_synced ? new Date(it.last_synced).toLocaleString("zh-CN") : "尚未同步"}</div>
     </div>`).join("");
 }
@@ -567,6 +583,8 @@ function renderRewards() {
     </article>`;
   }).join("");
   updateScrollButtons();
+  renderPointsPeriods(keys);
+  renderPointsDrill(keys);
 
   const rows = Object.values(cards).sort((x, y) => y.earned - x.earned || y.spend - x.spend);
   $("#card-earn").innerHTML = rows.length ? `<div class="card earn-table">${rows.map((c) => {
@@ -577,7 +595,7 @@ function renderRewards() {
     return `<div class="earn-row">
       ${programLogo(c.prog, "plogo sm")}
       <div class="er-main">
-        <div class="er-title">${esc(R.PRODUCTS[c.pk].name)}${/_other$/.test(c.pk) ? '<span class="tag warn-tag">未识别卡型</span>' : ""}<span class="meta"> · ${esc(c.a.name)}${c.a.mask ? " ··" + esc(c.a.mask) : ""}</span></div>
+        <div class="er-title">${esc(R.PRODUCTS[c.pk].name)}${/_other$/.test(c.pk) ? '<span class="tag warn-tag">未识别卡型</span>' : ""}<span class="meta"> · ${esc(c.a.institution)}${c.a.mask ? " ··" + esc(c.a.mask) : ""}</span></div>
         <div class="chips">${chips || '<span class="meta">本月暂无消费</span>'}</div>
       </div>
       <div class="er-num">
@@ -604,12 +622,67 @@ function updateScrollButtons() {
   $(".program-scroller").classList.toggle("scrollable", max > 2);
 }
 
+// ---------------------------------------------------------------- 积分进账：今日 / 本周 / 本月 / 本季 / 本年
+const pointsUI = { prog: null, node: { lv: "year", k: String(new Date().getFullYear()) } };
+
+function periodStarts(t0) {
+  const d = new Date(+t0.slice(0, 4), +t0.slice(5, 7) - 1, +t0.slice(8, 10));
+  const iso = (x) => `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, "0")}-${String(x.getDate()).padStart(2, "0")}`;
+  const wk = new Date(d); wk.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+  const q = Math.floor(d.getMonth() / 3) * 3;
+  return [
+    ["今日", t0], ["本周", iso(wk)], ["本月", `${t0.slice(0, 7)}-01`],
+    ["本季", `${t0.slice(0, 4)}-${String(q + 1).padStart(2, "0")}-01`], ["本年", `${t0.slice(0, 4)}-01-01`],
+  ];
+}
+
+function renderPointsPeriods(keys) {
+  const el = $("#points-periods");
+  if (!keys.length) { el.innerHTML = ""; return; }
+  const t0 = today(), starts = periodStarts(t0);
+  const sums = Object.fromEntries(keys.map((k) => [k, starts.map(() => 0)]));
+  for (const t of state.txns) {
+    const e = state.earn.get(t.id);
+    if (!e || e.cat === "none" || !sums[e.program] || t.date > t0) continue;
+    starts.forEach(([, s], i) => { if (t.date >= s) sums[e.program][i] += e.earned; });
+  }
+  el.innerHTML = `<div class="card period-table"><table>
+    <thead><tr><th></th>${starts.map(([l, s]) => `<th>${l}<small>${l === "今日" ? `${+s.slice(5, 7)}/${+s.slice(8)}` : `${+s.slice(5, 7)}/${+s.slice(8)} 起`}</small></th>`).join("")}</tr></thead>
+    <tbody>${keys.map((k) => {
+      const p = R.PROGRAMS[k];
+      return `<tr><th>${programLogo(k, "plogo xs")}<span>${esc(p.name)}</span></th>${sums[k].map((v) =>
+        `<td class="${v ? "" : "zero"}">${v ? (v > 0 ? "+" : "") + esc(R.fmtEarned(v, p.unit)) : "—"}</td>`).join("")}</tr>`;
+    }).join("")}</tbody>
+  </table><p class="hint">按交易日期统计的估算积分（含 Pending），以银行账单为准</p></div>`;
+}
+
+function renderPointsDrill(keys) {
+  const wrap = $(".points-drill");
+  if (!keys.length) { wrap.hidden = true; return; }
+  wrap.hidden = false;
+  if (!keys.includes(pointsUI.prog)) pointsUI.prog = keys[0];
+  $("#points-prog").innerHTML = keys.map((k) => `<button data-points-prog="${k}" class="${k === pointsUI.prog ? "on" : ""}">${esc(R.PROGRAMS[k].name)}</button>`).join("");
+  const k = pointsUI.prog, p = R.PROGRAMS[k];
+  const entries = [];
+  for (const t of state.txns) {
+    const e = state.earn.get(t.id);
+    if (e && e.cat !== "none" && e.program === k) entries.push({ date: t.date, s: k, v: e.earned });
+  }
+  const fmtP = (v) => (p.unit === "cash" ? "" : "") + R.fmtEarned(v, p.unit) + (p.unit === "cash" ? "" : " 点");
+  const shortP = (v) => (p.unit === "cash" ? `$${Math.round(v)}` : Math.abs(v) >= 1000 ? `${(v / 1000).toFixed(v >= 10000 ? 0 : 1)}k` : String(Math.round(v)));
+  $("#points-drill").innerHTML = RT_DRILL.chart({
+    id: "pts", node: pointsUI.node, entries, fmt: fmtP, short: shortP,
+    series: [{ id: k, label: p.name, color: p.color }],
+  });
+  RT_DRILL.bind($(".points-drill"), "pts", (n) => { pointsUI.node = n; renderPointsDrill(keys); });
+}
+
 function renderSettings() {
   const accts = creditAccounts();
   const options = productOptions;
   $("#card-map").innerHTML = accts.length ? accts.map((a) => `
     <label class="map-row">
-      <span>${esc(a.institution)} · ${esc(a.name)}${a.mask ? " ··" + esc(a.mask) : ""}</span>
+      <span>${esc(a.institution)} · ${esc(cardNameMask(a))}${cardName(a) !== a.name ? `（${esc(a.name)}）` : ""}</span>
       <span class="map-controls">
         <select data-map="${esc(a.id)}"><option value="">不计积分</option>${options(productOf(a))}</select>
         <span class="closing-input" title="Statement closing date：每月几号出账单">账单日
@@ -626,7 +699,7 @@ function renderSettings() {
     const pk = a && productOf(a);
     const unit = pk ? R.PROGRAMS[R.PRODUCTS[pk].program].unit : "pts";
     return `<div class="rule-row">
-      <span>${esc(a ? a.name + (a.mask ? " ··" + a.mask : "") : "已断开的卡")} · ${esc(R.ruleKeyLabel(r.key))}</span>
+      <span>${esc(a ? cardNameMask(a) : "已断开的卡")} · ${esc(R.ruleKeyLabel(r.key))}</span>
       <b>${esc(R.fmtRate(r.rate, unit))}</b>
       <button class="btn small ghost" data-unrule="${esc(r.acct)}|${esc(r.key)}">删除</button>
     </div>`;
@@ -694,6 +767,10 @@ function toggleSettings(open) {
 
 function bindRewards() {
   $("#r-month").addEventListener("input", renderRewards);
+  $("#points-prog").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-points-prog]");
+    if (b) { pointsUI.prog = b.dataset.pointsProg; renderRewards(); }
+  });
   const pl = $("#program-list");
   const step = () => (pl.querySelector(".program")?.offsetWidth || 280) + 12;
   $("#p-prev").addEventListener("click", () => pl.scrollBy({ left: -step(), behavior: "smooth" }));
@@ -743,6 +820,18 @@ function bindRewards() {
     if (next.rules[acct]) { delete next.rules[acct][key]; if (!Object.keys(next.rules[acct]).length) delete next.rules[acct]; }
     saveRewards(next, "已删除，恢复按卡片默认倍数");
   });
+}
+
+// 额度进度：已用 / 额度，30% 以内绿色、30–70% 琥珀、70% 以上红色（信用分常看 30% 这条线）
+function limitBar(a) {
+  const used = Math.max(0, a.balance_current || 0), lim = a.limit;
+  const pct = Math.min(100, (used / lim) * 100);
+  const avail = a.balance_available != null ? a.balance_available : lim - used;
+  const level = pct < 30 ? "ok" : pct < 70 ? "mid" : "high";
+  return `<div class="limit ${level}">
+    <div class="limit-track"><i style="width:${pct.toFixed(1)}%"></i><span class="mark" title="30% 使用率"></span></div>
+    <div class="limit-nums"><span>已用 ${pct.toFixed(0)}%${level === "high" ? " · 偏高" : ""}</span><span>可用 ${fmt(avail, a.currency)}</span></div>
+  </div>`;
 }
 
 // ---------------------------------------------------------------- ui
