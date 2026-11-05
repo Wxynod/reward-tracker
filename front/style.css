@@ -588,3 +588,9 @@ body.editing main { padding-bottom: 120px; }
 .pick.on { border-color: var(--seal); background: color-mix(in srgb, var(--seal) 6%, #fff); }
 .an-scope { font-size: 12px; color: var(--muted); align-self: center; }
 .an-scope b { color: var(--ink); }
+
+/* 账户行：左边名称可换行，右边金额固定在右上，额度条占满整行 */
+.acct { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 16px; align-items: start; }
+.acct > div:first-child { min-width: 0; overflow-wrap: anywhere; }
+.acct > div:nth-child(2) { white-space: nowrap; }
+.acct .limit { grid-column: 1 / -1; }
