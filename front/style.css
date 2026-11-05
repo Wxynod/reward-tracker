@@ -493,3 +493,28 @@ body.editing main { padding-bottom: 120px; }
   .an-grid { grid-template-columns: 1fr; }
   .tabs { gap: 20px; }
 }
+
+/* ------------------------------------------------ analytics: grouping, matrix, single card */
+.seg-row { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.matrix-wrap { max-height: none; }
+.matrix { border-collapse: separate; border-spacing: 3px; width: 100%; font-size: 12px; font-variant-numeric: tabular-nums; }
+.matrix th { font-weight: 500; color: var(--muted); white-space: nowrap; padding: 2px 6px; text-align: center; }
+.matrix tbody th { text-align: left; color: var(--ink); }
+.matrix tbody th i { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 6px; }
+.matrix td { text-align: center; padding: 6px 4px; border-radius: 5px; background: #f6f1e9; color: var(--ink); min-width: 46px; white-space: nowrap; }
+.matrix td:hover { outline: 1.5px solid var(--ink); }
+.matrix td.tot { background: none; font-weight: 600; text-align: right; }
+.matrix tr.sum td { background: none; font-weight: 600; border-top: 1px solid var(--line); }
+.movers { display: flex; flex-direction: column; gap: 4px; margin-top: 10px; font-size: 12px; color: var(--muted); }
+.movers i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 6px; }
+.movers b.up { color: var(--seal); } .movers b.down { color: var(--jade); }
+
+.an-card.single .an-head select { border: 1px solid var(--line); background: var(--card); border-radius: 6px; padding: 5px 10px; max-width: 60%; }
+.an-sub .dot { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 6px; vertical-align: 0; }
+.an-kpis.small .value { font-size: 19px; }
+.an-kpis.small { margin-bottom: 6px; }
+.an-grid.inner { gap: 24px; margin-top: 12px; }
+.an-grid.inner h4 { margin: 0 0 8px; font-size: 13px; color: var(--muted); font-weight: 500; letter-spacing: .04em; }
+.mix { display: flex; height: 14px; border-radius: 4px; overflow: hidden; gap: 2px; margin-bottom: 8px; }
+.mix b { display: block; min-width: 3px; }
+.tag.bonus { color: var(--jade); border-color: rgba(47, 107, 85, .35); margin-left: 4px; font-size: 10px; }

@@ -9,7 +9,21 @@
   const NO_SPEND = new Set(["LOAN_PAYMENTS", "TRANSFER_IN", "TRANSFER_OUT", "INCOME", "BANK_FEES"]);
   const WEEK = ["一", "二", "三", "四", "五", "六", "日"];
 
-  const ui = { card: "", range: "180", grain: "week" };
+  const ui = { card: "", range: "180", grain: "week", group: "card", single: "" };
+
+  // 消费大类：8 个固定分组，颜色跟着分组走（不按排名换色），顺序即堆叠顺序
+  const GROUPS = [
+    { id: "travel",   label: "出行住宿", color: "#2a78d6", keys: ["flights", "hotels", "travel", "car_rental"] },
+    { id: "dining",   label: "餐饮",     color: "#eb6834", keys: ["dining", "fast_food", "coffee", "bar"] },
+    { id: "grocery",  label: "超市",     color: "#1baf7a", keys: ["grocery"] },
+    { id: "commute",  label: "交通加油", color: "#eda100", keys: ["taxi", "transit", "parking", "gas", "ev"] },
+    { id: "shopping", label: "购物",     color: "#e87ba4", keys: ["shopping", "apparel", "electronics", "home", "gifts", "pets"] },
+    { id: "health",   label: "健康个护", color: "#008300", keys: ["drugstore", "medical", "beauty", "fitness"] },
+    { id: "digital",  label: "订阅通讯", color: "#6250d6", keys: ["streaming", "phone", "utilities", "education", "entertainment"] },
+    { id: "other",    label: "其他",     color: "#a39c90", keys: [] },
+  ];
+  const GROUP_OF = Object.fromEntries(GROUPS.flatMap((g) => g.keys.map((k) => [k, g.id])));
+  const groupOf = (t) => GROUP_OF[I.info(t).key] || "other";
 
   // ------------------------------------------------------------ 日期工具（全部按本地日历日 YYYY-MM-DD）
   const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -79,15 +93,21 @@
       <section class="an-card">
         <div class="an-head">
           <h3>消费趋势</h3>
-          <div class="seg" role="tablist">${[["day", "日"], ["week", "周"], ["month", "月"], ["quarter", "季"]].map(([v, l]) =>
+          <div class="seg-row">
+          <div class="seg" role="tablist" aria-label="分组">${[["card", "按卡"], ["cat", "按类别"]].map(([v, l]) =>
+            `<button data-group="${v}" class="${v === ui.group ? "on" : ""}">${l}</button>`).join("")}</div>
+          <div class="seg" role="tablist" aria-label="时间粒度">${[["day", "日"], ["week", "周"], ["month", "月"], ["quarter", "季"]].map(([v, l]) =>
             `<button data-grain="${v}" class="${v === ui.grain ? "on" : ""}">${l}</button>`).join("")}</div>
+          </div>
         </div>
         ${trend(inRange, from, today, cards)}
       </section>
+      <section class="an-card">${catMatrix(inRange, from, today)}</section>
       <div class="an-grid">
         <section class="an-card">${byCard(inRange, cards)}</section>
         <section class="an-card">${byCategory(inRange)}</section>
       </div>
+      <section class="an-card single">${singleCard(cards, from, today)}</section>
       <div class="an-grid">
         <section class="an-card">${weekday(inRange, from, today)}</section>
         <section class="an-card">${merchants(inRange)}</section>
@@ -129,13 +149,15 @@
     const end = bucketOf(today, g);
     const keys = [];
     for (let b = start; b <= end && keys.length < 400; b = nextBucket(b, g)) keys.push(b);
-    const series = ui.card ? cards.filter((c) => c.id === ui.card) : cards;
+    const series = ui.group === "cat" ? GROUPS : ui.card ? cards.filter((c) => c.id === ui.card) : cards;
+    const keyOf = ui.group === "cat" ? groupOf : (t) => t.account_id;
     const data = keys.map((k) => ({ k, total: 0, by: Object.fromEntries(series.map((c) => [c.id, 0])) }));
     const idx = new Map(keys.map((k, i) => [k, i]));
     for (const t of list) {
       const i = idx.get(bucketOf(t.date, g));
-      if (i == null || data[i].by[t.account_id] == null) continue;
-      data[i].by[t.account_id] += t.amount; data[i].total += t.amount;
+      const k = keyOf(t);
+      if (i == null || data[i].by[k] == null) continue;
+      data[i].by[k] += t.amount; data[i].total += t.amount;
     }
     if (!data.some((d) => d.total)) return `<div class="empty small">这段时间没有消费</div>`;
 
@@ -318,6 +340,148 @@
       }).join("")}</div>`;
   }
 
+  // ------------------------------------------------------------ 分类 × 时间：热力表（跟随上面的日 / 周 / 月 / 季）
+  function catMatrix(list, from, today) {
+    const g = ui.grain;
+    const n = { day: 14, week: 12, month: 12, quarter: 8 }[g];
+    const keys = [];
+    let b = bucketOf(today, g);
+    const first = bucketOf(from, g);
+    for (let i = 0; i < n && b >= first; i++) {
+      keys.unshift(b);
+      if (g === "day") b = addDays(b, -1);
+      else if (g === "week") b = addDays(b, -7);
+      else if (g === "month") { let y = +b.slice(0, 4), m = +b.slice(5, 7) - 1; if (!m) { m = 12; y--; } b = `${y}-${String(m).padStart(2, "0")}`; }
+      else { let y = +b.slice(0, 4), q = +b.slice(6) - 1; if (!q) { q = 4; y--; } b = `${y}-Q${q}`; }
+    }
+    const cell = {}, rowTot = {}, colTot = {};
+    for (const t of list) {
+      const k = bucketOf(t.date, g);
+      if (!keys.includes(k)) continue;
+      const gr = groupOf(t);
+      cell[`${gr}|${k}`] = (cell[`${gr}|${k}`] || 0) + t.amount;
+      rowTot[gr] = (rowTot[gr] || 0) + t.amount;
+      colTot[k] = (colTot[k] || 0) + t.amount;
+    }
+    const rows = GROUPS.filter((gr) => rowTot[gr.id] > 0);
+    if (!rows.length) return `<h3>分类 × 时间</h3><div class="empty small">没有消费</div>`;
+    const vals = Object.values(cell).filter((v) => v > 0).sort((a, c) => a - c);
+    const q = (p) => vals[Math.min(vals.length - 1, Math.floor(p * vals.length))];
+    const cuts = [q(0.3), q(0.55), q(0.8), q(0.95)];
+    const shade = (v) => (v <= 0 ? "" : `background:${HEAT[cuts.filter((c) => v > c).length]};${cuts.filter((c) => v > c).length >= 3 ? "color:#fff;" : ""}`);
+    const unit = { day: "天", week: "周", month: "月", quarter: "季" }[g];
+    // 每类在最近一期 vs 前几期平均的变化，找出异常
+    const last = keys[keys.length - 1], prev = keys.slice(0, -1);
+    const movers = rows.map((gr) => {
+      const now = cell[`${gr.id}|${last}`] || 0;
+      const base = prev.length ? prev.reduce((s, k) => s + (cell[`${gr.id}|${k}`] || 0), 0) / prev.length : 0;
+      return { gr, now, base, d: now - base };
+    }).filter((m) => m.base > 0 || m.now > 0).sort((a, c) => Math.abs(c.d) - Math.abs(a.d)).slice(0, 3);
+    return `<h3>分类 × 时间</h3>
+      <p class="an-sub">每${unit}各大类花了多少，颜色越深越多 · 跟随上方的「日 / 周 / 月 / 季」</p>
+      <div class="tbl-wrap matrix-wrap"><table class="matrix">
+        <thead><tr><th></th>${keys.map((k) => `<th>${bucketLabel(k, g)}</th>`).join("")}<th>合计</th></tr></thead>
+        <tbody>${rows.map((gr) => `<tr><th><i style="background:${gr.color}"></i>${gr.label}</th>${keys.map((k) => {
+          const v = cell[`${gr.id}|${k}`] || 0;
+          return `<td style="${shade(v)}" ${v ? `data-tip="${esc(`${gr.label} · ${bucketLabel(k, g, true)}|${money(v)}|占当期 ${colTot[k] ? (v / colTot[k] * 100).toFixed(0) : 0}%`)}"` : ""}>${v ? short(v) : "·"}</td>`;
+        }).join("")}<td class="tot">${money(rowTot[gr.id])}</td></tr>`).join("")}
+        <tr class="sum"><th>合计</th>${keys.map((k) => `<td>${colTot[k] ? short(colTot[k]) : "·"}</td>`).join("")}<td class="tot">${money(Object.values(rowTot).reduce((s, v) => s + v, 0))}</td></tr></tbody>
+      </table></div>
+      ${prev.length && movers.length ? `<div class="movers">${movers.map((m) => `<span><i style="background:${m.gr.color}"></i>${m.gr.label}：本${unit} ${money(m.now)}，${m.d >= 0 ? "比" : "比"}前 ${prev.length} ${unit}平均${m.d >= 0 ? "多" : "少"} <b class="${m.d >= 0 ? "up" : "down"}">${money(Math.abs(m.d))}</b></span>`).join("")}</div>` : ""}`;
+  }
+
+  // ------------------------------------------------------------ 单卡分析
+  function singleCard(cards, from, today) {
+    const credit = new Set(creditAccounts().map((a) => a.id));
+    const spendOf = (id) => state.txns.filter((t) => t.account_id === id && credit.has(id) && !NO_SPEND.has(t.category) && !R.isBenefitCredit(t));
+    // 默认选：上方筛选的卡；否则所选时间内消费最多的卡
+    let id = ui.single || ui.card;
+    if (!id || !cards.some((c) => c.id === id)) {
+      id = cards.map((c) => [c.id, spendOf(c.id).filter((t) => t.date >= from).reduce((s, t) => s + t.amount, 0)]).sort((a, b) => b[1] - a[1])[0][0];
+    }
+    const c = cards.find((x) => x.id === id);
+    const pk = productOf(c.a), product = R.PRODUCTS[pk], prog = product && R.PROGRAMS[product.program];
+    const txs = spendOf(id);
+    const inR = txs.filter((t) => t.date >= from && t.date <= today);
+    const spend = inR.reduce((s, t) => s + t.amount, 0);
+    const buys = inR.filter((t) => t.amount > 0);
+    let earned = 0;
+    const byRate = new Map();
+    for (const t of inR) {
+      const e = state.earn.get(t.id);
+      if (!e || e.cat === "none") continue;
+      earned += e.earned;
+      if (t.amount > 0) {
+        const r = Math.round(e.rate * 2) / 2;
+        byRate.set(r, (byRate.get(r) || 0) + t.amount);
+      }
+    }
+    const unit = prog?.unit || "pts";
+    const eff = spend > 0 ? (earned / spend) * (unit === "cash" ? 100 : 1) : 0;
+    const base = product?.base ?? 1;
+    const bonusSpend = [...byRate.entries()].filter(([r]) => r > base).reduce((s, [, v]) => s + v, 0);
+    const buyTotal = buys.reduce((s, t) => s + t.amount, 0);
+
+    // 近 12 个月每月消费（小柱图）
+    const months = [];
+    let m = today.slice(0, 7);
+    for (let i = 0; i < 12; i++) { months.unshift(m); let y = +m.slice(0, 4), mm = +m.slice(5) - 1; if (!mm) { mm = 12; y--; } m = `${y}-${String(mm).padStart(2, "0")}`; }
+    const mv = months.map((k) => txs.filter((t) => t.date.startsWith(k)).reduce((s, t) => s + t.amount, 0));
+    const mmax = niceMax(Math.max(...mv, 1));
+    const W = 360, H = 130, T = 14, B = 22, ph = H - T - B, step = W / 12, bw = step * 0.6;
+    const spark = mv.map((v, i) => {
+      const h = (Math.max(0, v) / mmax) * ph, x = step * i + (step - bw) / 2;
+      return `<rect x="${x}" y="${T + ph - h}" width="${bw}" height="${Math.max(h, 0.5)}" rx="3" fill="${c.color}" opacity="${months[i] === today.slice(0, 7) ? 1 : 0.8}"/>
+        ${i % 3 === 2 || i === 11 ? `<text x="${x + bw / 2}" y="${H - 6}" class="tick" text-anchor="middle">${+months[i].slice(5)}月</text>` : ""}
+        <rect x="${step * i}" y="${T}" width="${step}" height="${ph}" class="hit" data-tip="${esc(`${months[i].slice(0, 4)} 年 ${+months[i].slice(5)} 月|${money(v)}`)}"/>`;
+    }).join("");
+
+    // 类别构成（100% 条）
+    const gsum = {};
+    for (const t of inR) gsum[groupOf(t)] = (gsum[groupOf(t)] || 0) + t.amount;
+    const gpos = GROUPS.filter((gr) => gsum[gr.id] > 0);
+    const gtot = gpos.reduce((s, gr) => s + gsum[gr.id], 0);
+    const mix = gtot ? `<div class="mix">${gpos.map((gr) => `<b style="flex:${gsum[gr.id]};background:${gr.color}" data-tip="${esc(`${gr.label}|${money(gsum[gr.id])}|占 ${(gsum[gr.id] / gtot * 100).toFixed(0)}%`)}"></b>`).join("")}</div>
+      <div class="legend">${gpos.map((gr) => `<span><i style="background:${gr.color}"></i>${gr.label} ${(gsum[gr.id] / gtot * 100).toFixed(0)}%</span>`).join("")}</div>` : "";
+
+    // 倍数分布：每档倍数下的消费额
+    const rates = [...byRate.entries()].sort((a, b) => b[0] - a[0]);
+    const rmax = Math.max(...rates.map(([, v]) => v), 1);
+    const rateRows = rates.map(([r, v]) => `<div class="hbar" data-tip="${esc(`${R.fmtRate(r, unit)}|${money(v)}|占消费 ${buyTotal ? (v / buyTotal * 100).toFixed(0) : 0}%`)}">
+      <div class="hbar-label">${R.fmtRate(r, unit)}${r > base ? ' <span class="tag bonus">加成</span>' : ""}</div>
+      <div class="hbar-track"><b style="width:${(v / rmax * 100).toFixed(1)}%;background:${c.color};opacity:${r > base ? 1 : 0.45}"></b></div>
+      <div class="hbar-val">${money(v)}</div></div>`).join("");
+
+    // 这张卡最常去的商户
+    const mm2 = new Map();
+    for (const t of inR) { const k = (t.merchant || t.name || "").trim(); const x = mm2.get(k) || { k, v: 0, n: 0, t }; x.v += t.amount; if (t.amount > 0) x.n++; mm2.set(k, x); }
+    const tops = [...mm2.values()].filter((x) => x.v > 0).sort((a, b) => b.v - a.v).slice(0, 5);
+
+    const closing = state.rewards.closing?.[id];
+    return `<div class="an-head">
+        <h3>单卡分析</h3>
+        <select id="an-single">${cards.map((x) => `<option value="${esc(x.id)}" ${x.id === id ? "selected" : ""}>${esc(x.label)}</option>`).join("")}</select>
+      </div>
+      <p class="an-sub"><i class="dot" style="background:${c.color}"></i>${esc(product?.name || c.a.name)} · ${esc(c.a.institution)}${prog ? ` · ${esc(prog.name)}` : ""} · 账单日 ${closing ? `每月 ${closing} 号` : "未设置（按月底）"} · 时间范围跟随上方筛选</p>
+      <div class="an-kpis small">
+        <div class="stat"><div class="label">消费</div><div class="value">${money(spend)}</div><div class="sub">${buys.length} 笔 · 客单价 ${buys.length ? money(buyTotal / buys.length) : "—"}</div></div>
+        <div class="stat"><div class="label">估算积分</div><div class="value">${prog ? esc(R.fmtEarned(earned, unit)) : "—"}</div><div class="sub">${prog ? esc(prog.name) : "未设置卡型"}</div></div>
+        <div class="stat"><div class="label">平均倍数</div><div class="value">${esc(R.fmtRate(eff, unit))}</div><div class="sub">基础 ${esc(R.fmtRate(base, unit))}</div></div>
+        <div class="stat"><div class="label">吃到加成的消费</div><div class="value">${buyTotal ? (bonusSpend / buyTotal * 100).toFixed(0) : 0}%</div><div class="sub">${money(bonusSpend)} 拿到高于基础的倍数</div></div>
+      </div>
+      <div class="an-grid inner">
+        <div><h4>近 12 个月</h4><svg viewBox="0 0 ${W} ${H}" class="chart" role="img" aria-label="近 12 个月消费"><line x1="0" x2="${W}" y1="${T + ph}" y2="${T + ph}" class="grid base"/>${spark}</svg></div>
+        <div><h4>倍数分布</h4>${rateRows || '<div class="empty small">没有消费</div>'}</div>
+      </div>
+      <div class="an-grid inner">
+        <div><h4>类别构成</h4>${mix || '<div class="empty small">没有消费</div>'}</div>
+        <div><h4>常去商户</h4><div class="mlist">${tops.map((x) => {
+          const ic = I.info(x.t);
+          return `<div class="mrow"><span class="mini-icon" style="--c:${ic.color}">${I.svg(ic.icon)}</span><span class="mname">${esc(x.k)}<small>${x.n} 次</small></span><b>${money(x.v)}</b></div>`;
+        }).join("") || '<div class="empty small">没有消费</div>'}</div></div>
+      </div>`;
+  }
+
   // ------------------------------------------------------------ 悬停提示（所有图共用一个）
   function tooltip() {
     let tip = document.getElementById("an-tip");
@@ -352,10 +516,13 @@
     root.addEventListener("change", (e) => {
       if (e.target.id === "an-card") { ui.card = e.target.value; render(); }
       if (e.target.id === "an-range") { ui.range = e.target.value; render(); }
+      if (e.target.id === "an-single") { ui.single = e.target.value; render(); }
     });
     root.addEventListener("click", (e) => {
       const b = e.target.closest("[data-grain]");
       if (b) { ui.grain = b.dataset.grain; render(); }
+      const gb = e.target.closest("[data-group]");
+      if (gb) { ui.group = gb.dataset.group; render(); }
     });
     root.addEventListener("pointermove", (e) => {
       const el = e.target.closest("[data-tip]");
