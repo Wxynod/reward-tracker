@@ -345,3 +345,40 @@ body.editing main { padding-bottom: 120px; }
 }
 .cat-icon.has-logo .cat-dot { display: grid; }
 .cat-icon .cat-dot svg { width: 11px; height: 11px; stroke-width: 2.4; }
+
+/* ------------------------------------------------ program carousel */
+.program-scroller { position: relative; }
+.programs {
+  display: grid; grid-auto-flow: column; grid-template-columns: none;
+  grid-auto-columns: calc((100% - 24px) / 3);
+  gap: 12px; overflow-x: auto; scroll-snap-type: x mandatory; scroll-behavior: smooth;
+  padding: 2px 2px 10px; margin: 0 -2px; scrollbar-width: thin;
+}
+.programs > .program { scroll-snap-align: start; }
+.plabel { font-size: 11px; letter-spacing: .08em; color: var(--muted); text-transform: uppercase; margin-top: 2px; }
+.pmonth em { font-style: normal; font-size: 12px; color: var(--muted); }
+.scroll-btn {
+  position: absolute; top: 50%; transform: translateY(-60%); z-index: 2;
+  width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--line);
+  background: var(--card); box-shadow: 0 4px 14px rgba(31, 28, 24, .12);
+  font-size: 22px; line-height: 1; cursor: pointer; display: none; color: var(--ink);
+}
+.scroll-btn.prev { left: -14px; } .scroll-btn.next { right: -14px; }
+.program-scroller.scrollable .scroll-btn { display: grid; place-items: center; }
+.scroll-btn:disabled { opacity: 0; pointer-events: none; }
+
+.unknown-bar {
+  background: color-mix(in srgb, var(--seal) 7%, var(--card)); border: 1px solid color-mix(in srgb, var(--seal) 30%, var(--line));
+  border-radius: var(--radius); padding: 12px 16px; margin-bottom: 14px; font-size: 13px; line-height: 1.6;
+}
+.unknown-bar b { color: var(--seal); }
+.unknown-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 8px; }
+.unknown-row span { min-width: 180px; }
+.unknown-row select { border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; background: #fff; }
+.warn-tag { color: var(--seal); border-color: color-mix(in srgb, var(--seal) 40%, transparent); }
+
+@media (max-width: 900px) { .programs { grid-auto-columns: calc((100% - 12px) / 2); } }
+@media (max-width: 560px) {
+  .programs { grid-auto-columns: 86%; }
+  .scroll-btn { display: none !important; }
+}

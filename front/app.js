@@ -432,27 +432,45 @@ function renderRewards() {
     c.cats[label] = (c.cats[label] || 0) + e.earned;
   }
 
-  const keys = Object.keys(R.PROGRAMS).filter((k) => editing || progs[k] || balances[k]);
+  // 常用积分计划一直显示（没关联卡也显示，方便录余额）；Amex 现金返现只在用到时显示
+  const ALWAYS = ["chase_ur", "citi_ty", "amex_mr", "marriott", "barclays", "apple_cash"];
+  const keys = Object.keys(R.PROGRAMS).filter((k) => ALWAYS.includes(k) || progs[k] || balances[k]);
   const [y, m] = month.split("-");
-  $("#r-note").textContent = `${y} 年 ${Number(m)} 月 · 积分按卡片倍数估算，以银行账单为准`;
+  $("#r-note").textContent = `${y} 年 ${Number(m)} 月 · Pending 为按卡片倍数估算的本月新增，以银行账单为准`;
 
-  $("#program-list").innerHTML = keys.length ? keys.map((k) => {
-    const p = R.PROGRAMS[k], g = progs[k] || { month: 0, since: 0 }, b = balances[k];
+  const unknown = creditAccounts().filter((a) => /_other$/.test(productOf(a) || ""));
+  $("#r-unknown").innerHTML = unknown.length ? `<div class="unknown-bar">
+      <b>${unknown.length} 张卡没认出卡型</b>，暂按 1x 计算。银行给的账户名太笼统时需要手动选一下：
+      ${unknown.map((a) => `<label class="unknown-row"><span>${esc(a.institution)} · ${esc(a.name)}${a.mask ? " ··" + esc(a.mask) : ""}</span>
+        <select data-map="${esc(a.id)}"><option value="">不计积分</option>${productOptions(productOf(a))}</select></label>`).join("")}
+    </div>` : "";
+
+  $("#program-list").innerHTML = keys.map((k) => {
+    const p = R.PROGRAMS[k], g = progs[k], b = balances[k];
+    const unitTxt = p.unit === "cash" ? "" : "点";
     const balView = editing
-      ? `<label class="bal-edit"><span>${p.unit === "cash" ? "$" : ""}</span><input type="number" step="${p.unit === "cash" ? "0.01" : "1"}" min="0" inputmode="decimal" data-bal="${k}" value="${esc(state.draft.balances[k] ?? b?.value ?? "")}" placeholder="输入当前余额"><span>${p.unit === "cash" ? "" : "点"}</span></label>`
+      ? `<label class="bal-edit"><span>${p.unit === "cash" ? "$" : ""}</span><input type="number" step="${p.unit === "cash" ? "0.01" : "1"}" min="0" inputmode="decimal" data-bal="${k}" value="${esc(state.draft.balances[k] ?? b?.value ?? "")}" placeholder="输入总积分"><span>${unitTxt}</span></label>`
       : b
         ? `<div class="pbal">${esc(R.fmtEarned(b.value, p.unit))}<small>${unitWord(k)}</small></div>`
-        : `<div class="pbal empty-bal">—<small>右上角设置 → 更新，录入余额</small></div>`;
-    const sinceLine = b && !editing
-      ? `<div class="pmeta">余额更新于 ${esc(b.updated)}${g.since ? ` · 之后新增约 ${esc(fmtBal(g.since, k))}，估算当前 <b>${esc(fmtBal(b.value + g.since, k))}</b>` : ""}</div>`
-      : `<div class="pmeta">${editing ? "保存后记为今天的余额" : "&nbsp;"}</div>`;
+        : `<div class="pbal empty-bal">—<small>点 ⚙ →「更新」录入</small></div>`;
+    const since = g?.since || 0;
+    const metaLine = editing
+      ? "保存后记为今天的余额"
+      : b
+        ? `更新于 ${esc(b.updated)}${since ? ` · 含之后新增估算 <b>${esc(fmtBal(b.value + since, k))}</b>` : ""}`
+        : "&nbsp;";
     return `<article class="program" style="--brand:${p.color}">
       <header>${programLogo(k)}<div><div class="pname">${esc(p.name)}</div><div class="pissuer">${esc(p.issuer)}</div></div></header>
+      <div class="plabel">Balance · 总积分</div>
       ${balView}
-      ${sinceLine}
-      <div class="pmonth"><span>${Number(m)} 月预估</span><b>${g.month >= 0 ? "+" : ""}${esc(fmtBal(g.month, k))}</b></div>
+      <div class="pmeta">${metaLine}</div>
+      <div class="pmonth">
+        <span>Pending · ${Number(m)} 月</span>
+        ${g ? `<b>${g.month >= 0 ? "+" : ""}${esc(fmtBal(g.month, k))}</b>` : `<em>未关联卡片</em>`}
+      </div>
     </article>`;
-  }).join("") : `<div class="empty">连接信用卡后，这里会按积分计划汇总。</div>`;
+  }).join("");
+  updateScrollButtons();
 
   const rows = Object.values(cards).sort((x, y) => y.earned - x.earned || y.spend - x.spend);
   $("#card-earn").innerHTML = rows.length ? `<div class="card earn-table">${rows.map((c) => {
@@ -463,7 +481,7 @@ function renderRewards() {
     return `<div class="earn-row">
       ${programLogo(c.prog, "plogo sm")}
       <div class="er-main">
-        <div class="er-title">${esc(R.PRODUCTS[c.pk].name)}<span class="meta"> · ${esc(c.a.name)}${c.a.mask ? " ··" + esc(c.a.mask) : ""}</span></div>
+        <div class="er-title">${esc(R.PRODUCTS[c.pk].name)}${/_other$/.test(c.pk) ? '<span class="tag warn-tag">未识别卡型</span>' : ""}<span class="meta"> · ${esc(c.a.name)}${c.a.mask ? " ··" + esc(c.a.mask) : ""}</span></div>
         <div class="chips">${chips || '<span class="meta">本月暂无消费</span>'}</div>
       </div>
       <div class="er-num">
@@ -474,13 +492,25 @@ function renderRewards() {
   }).join("")}</div>` : "";
 }
 
-function renderSettings() {
-  const accts = creditAccounts();
+function productOptions(sel) {
   const groups = {};
   for (const [k, p] of Object.entries(R.PRODUCTS)) (groups[p.issuer] = groups[p.issuer] || []).push([k, p]);
-  const options = (sel) => Object.entries(groups).map(([iss, list]) =>
+  return Object.entries(groups).map(([iss, list]) =>
     `<optgroup label="${esc(iss)}">${list.map(([k, p]) =>
       `<option value="${k}" ${k === sel ? "selected" : ""}>${esc(p.name)} · ${esc(R.PROGRAMS[p.program].short)}</option>`).join("")}</optgroup>`).join("");
+}
+
+function updateScrollButtons() {
+  const el = $("#program-list");
+  const max = el.scrollWidth - el.clientWidth;
+  $("#p-prev").disabled = el.scrollLeft <= 2;
+  $("#p-next").disabled = el.scrollLeft >= max - 2;
+  $(".program-scroller").classList.toggle("scrollable", max > 2);
+}
+
+function renderSettings() {
+  const accts = creditAccounts();
+  const options = productOptions;
   $("#card-map").innerHTML = accts.length ? accts.map((a) => `
     <label class="map-row">
       <span>${esc(a.institution)} · ${esc(a.name)}${a.mask ? " ··" + esc(a.mask) : ""}</span>
@@ -564,6 +594,12 @@ function toggleSettings(open) {
 
 function bindRewards() {
   $("#r-month").addEventListener("input", renderRewards);
+  const pl = $("#program-list");
+  const step = () => (pl.querySelector(".program")?.offsetWidth || 280) + 12;
+  $("#p-prev").addEventListener("click", () => pl.scrollBy({ left: -step(), behavior: "smooth" }));
+  $("#p-next").addEventListener("click", () => pl.scrollBy({ left: step(), behavior: "smooth" }));
+  pl.addEventListener("scroll", updateScrollButtons, { passive: true });
+  window.addEventListener("resize", updateScrollButtons);
   $("#btn-settings").addEventListener("click", (e) => { e.stopPropagation(); toggleSettings(); });
   document.addEventListener("click", (e) => {
     if (!$("#settings").hidden && !e.target.closest(".settings-wrap")) toggleSettings(false);
