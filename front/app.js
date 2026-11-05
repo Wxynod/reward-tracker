@@ -529,9 +529,8 @@ function renderRewards() {
     c.cats[label] = (c.cats[label] || 0) + e.earned;
   }
 
-  // 常用积分计划一直显示（没关联卡也显示，方便录余额）；Amex 现金返现只在用到时显示
-  const ALWAYS = ["chase_ur", "citi_ty", "amex_mr", "marriott", "barclays", "apple_cash"];
-  const keys = Object.keys(R.PROGRAMS).filter((k) => ALWAYS.includes(k) || progs[k] || balances[k]);
+  // 只显示有关联卡片的积分计划
+  const keys = Object.keys(R.PROGRAMS).filter((k) => progs[k]);
   const [y, m] = month.split("-");
   $("#r-note").textContent = `Pending = 本期账单（上次账单日之后）的估算积分，过了账单日自动加进 Balance · 以银行账单为准`;
 
@@ -542,7 +541,7 @@ function renderRewards() {
         <select data-map="${esc(a.id)}"><option value="">不计积分</option>${productOptions(productOf(a))}</select></label>`).join("")}
     </div>` : "";
 
-  $("#program-list").innerHTML = keys.map((k) => {
+  $("#program-list").innerHTML = !keys.length ? `<div class="empty">连接信用卡后，这里会按积分计划汇总。</div>` : keys.map((k) => {
     const p = R.PROGRAMS[k], g = progs[k], b = balances[k];
     const unitTxt = p.unit === "cash" ? "" : "点";
     const balView = editing
