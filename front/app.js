@@ -169,6 +169,7 @@ function render() {
   renderTxns();
   renderBenefits();
   renderAccounts();
+  window.RT_ANALYTICS?.render();
 }
 
 function renderAccountSelects() {
@@ -305,9 +306,41 @@ function rotationCards(today) {
   }).join("");
 }
 
+// 自动任务：Marriott Bonvoy Brilliant 每个自然月 $25 餐饮报销
+const DINING_CREDIT = 25;
+function brilliantCreditCards(today) {
+  const ym = today.slice(0, 7);
+  const y = +ym.slice(0, 4), m = +ym.slice(5, 7);
+  const monthEnd = `${ym}-${String(new Date(y, m, 0).getDate()).padStart(2, "0")}`;
+  const daysLeft = Math.ceil((new Date(monthEnd) - new Date(today)) / 864e5);
+  return creditAccounts().filter((a) => productOf(a) === "bonvoy_brilliant").map((a) => {
+    const ts = state.txns.filter((t) => t.account_id === a.id && t.date.startsWith(ym));
+    const dining = ts.filter((t) => t.amount > 0 && state.earn.get(t.id)?.cat === "dining");
+    const spent = dining.reduce((s, t) => s + t.amount, 0);
+    const credited = -ts.filter((t) => R.isBenefitCredit(t) && /dining/i.test(`${t.name} ${t.merchant || ""}`)).reduce((s, t) => s + t.amount, 0);
+    const used = Math.min(spent, DINING_CREDIT);
+    const pct = (used / DINING_CREDIT) * 100;
+    const done = spent >= DINING_CREDIT;
+    const status = credited >= DINING_CREDIT - 0.01 ? `已报销 ${fmt(credited)}`
+      : done ? (credited > 0 ? `已到账 ${fmt(credited)}，其余等待入账` : "已刷满，等待报销入账（通常几天内）")
+      : `还差 ${fmt(DINING_CREDIT - spent)} · 本月剩 ${daysLeft} 天`;
+    return `<div class="card benefit auto bonvoy ${credited >= DINING_CREDIT - 0.01 ? "done" : ""}">
+      <div class="benefit-head">
+        <h3>Brilliant 每月 $25 餐饮报销 · ${m} 月</h3>
+        <span class="tag auto-tag">自动</span>
+      </div>
+      <div class="meta">${esc(a.name)}${a.mask ? " ··" + esc(a.mask) : ""} · 每个自然月用这张卡在餐厅消费，报销最多 $25 · ${ym}-01 至 ${monthEnd}</div>
+      <div class="bar"><i style="width:${pct.toFixed(1)}%"></i></div>
+      <div class="nums"><span>${fmt(used)} / ${fmt(DINING_CREDIT)}</span><span class="left">${esc(status)}</span></div>
+      ${dining.length ? `<ul class="rotation-items">${dining.slice(0, 5).map((t) => `<li>${+t.date.slice(5, 7)}/${+t.date.slice(8)} ${esc(t.merchant || t.name)} · ${fmt(t.amount)}</li>`).join("")}</ul>`
+        : `<p class="hint" style="margin-top:8px">本月还没有用这张卡吃饭，记得刷一次 $25 以上的餐厅消费。</p>`}
+    </div>`;
+  }).join("");
+}
+
 function renderBenefits() {
   const today = new Date().toISOString().slice(0, 10);
-  const auto = rotationCards(today);
+  const auto = brilliantCreditCards(today) + rotationCards(today);
   const list = [...state.benefits].sort((a, b) => a.end.localeCompare(b.end));
   if (!list.length) {
     $("#benefit-list").innerHTML = auto + `<div class="empty">还没有自定义权益任务。例如开卡奖励的消费门槛、每月 Uber / 餐饮 credit。</div>`;
@@ -782,6 +815,7 @@ function bind() {
   $("#login-form").addEventListener("submit", doLogin);
   ["#f-account", "#f-month", "#f-q"].forEach((s) => $(s).addEventListener("input", renderTxns));
   bindRewards();
+  window.RT_ANALYTICS?.bind();
   $("#cat-bar").addEventListener("click", (e) => {
     if (e.target.closest("[data-more]")) { state.catAll = !state.catAll; return renderCatBar(); }
     const b = e.target.closest("[data-cat]");
