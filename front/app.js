@@ -221,7 +221,7 @@ function txnRow(t) {
     <div class="cat-icon" style="--c:${ic.color}" title="${esc(ic.label)}${t.mcc ? " · MCC " + esc(t.mcc) : ""}">${I.svg(ic.icon)}${brand}</div>
     <div>
       <div class="title">${esc(title)}${t.pending ? '<span class="tag">待入账</span>' : ""}</div>
-      <div class="meta"><span class="cat-name" style="--c:${ic.color}">${esc(ic.label)}</span>${esc(a ? ` · ${a.name}${a.mask ? " ··" + a.mask : ""}` : "")}</div>
+      <div class="meta"><span class="cat-name" style="--c:${ic.color}">${esc(ic.label)}</span>${a ? esc(` · ${a.name}${a.mask ? " ··" + a.mask : ""}`) : ' · <span class="warn" title="这笔交易的账户不在当前账户列表里，点 ⚙ → 重新拉取全部交易">未知账户</span>'}</div>
     </div>
     <div class="right">
       <div class="amt ${t.amount < 0 ? "in" : ""}">${amt}</div>
@@ -319,7 +319,7 @@ function renderCatBar() {
   for (const t of filteredTxns({ ignoreCat: true })) {
     if (t.amount <= 0) continue;
     const ic = I.info(t);
-    if (["payment", "fee", "income"].includes(ic.key)) continue;
+    if (["payment", "fee", "income", "benefit"].includes(ic.key)) continue;
     const s = sums.get(ic.key) || { ...ic, total: 0 };
     s.total += t.amount; sums.set(ic.key, s);
   }
@@ -351,22 +351,26 @@ const fmtBal = (v, prog) => R.fmtEarned(v, R.PROGRAMS[prog].unit) + unitWord(pro
 function logoSources(issuer, domain) {
   const hit = Object.entries(state.logos).find(([name, v]) => R.issuerOf(name) === issuer && v.logo);
   const list = [];
+  const bf = domain && B.domainUrl(domain, 128);   // Brandfetch 高清图标优先
+  if (bf) list.push(bf);
   if (hit) list.push(`data:image/png;base64,${hit[1].logo}`);
   if (domain) list.push(`https://www.google.com/s2/favicons?domain=${domain}&sz=256`);
   return list;
 }
 
 function logoHTML(issuer, domain, color, letter, cls) {
-  const [src, fallback] = logoSources(issuer, domain);
+  const [src, ...rest] = logoSources(issuer, domain);
   const img = src
-    ? `<img src="${esc(src)}" alt="${esc(issuer)}" ${fallback ? `data-fallback="${esc(fallback)}"` : ""} onerror="logoFail(this)">`
+    ? `<img src="${esc(src)}" alt="${esc(issuer)}" ${rest.length ? `data-fallback="${esc(rest.join(" "))}"` : ""} referrerpolicy="strict-origin-when-cross-origin" onerror="logoFail(this)">`
     : "";
   return `<span class="${cls}" style="--brand:${esc(color || "#8a8276")}">${img}<i>${esc(letter)}</i></span>`;
 }
 
 window.logoFail = (img) => {
-  if (img.dataset.fallback) { img.src = img.dataset.fallback; delete img.dataset.fallback; }
-  else img.remove();
+  const [next, ...rest] = (img.dataset.fallback || "").split(" ").filter(Boolean);
+  if (!next) return img.remove();
+  if (rest.length) img.dataset.fallback = rest.join(" "); else delete img.dataset.fallback;
+  img.src = next;
 };
 
 function programLogo(key, cls = "plogo") {

@@ -94,6 +94,7 @@
   window.RT_BRANDS = {
     enabled: !!CLIENT_ID,
     url: (t) => logoUrl(domainFor(t)),
+    domainUrl: (domain, size = 128) => logoUrl(domain, size),
     searchPending: (cb) => { onFound = cb; drain(); },
   };
 })();

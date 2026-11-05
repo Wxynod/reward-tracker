@@ -193,10 +193,10 @@ async function syncItem(env, itemId, { full = false } = {}) {
   for (const t of [...result.added, ...result.modified]) store[t.transaction_id] = slimTxn(t);
   for (const r of result.removed) delete store[r.transaction_id];
 
-  let accounts = result.accounts;
-  if (!accounts?.length) {
-    accounts = (await plaid(env, "/accounts/get", { access_token: item.access_token })).accounts;
-  }
+  // 账户列表每次都用 /accounts/get（免费）取全量，避免交易对应的账户缺失
+  let accounts;
+  try { accounts = (await plaid(env, "/accounts/get", { access_token: item.access_token })).accounts; }
+  catch { accounts = result.accounts || []; }
 
   item.cursor = result.cursor;
   item.last_synced = new Date().toISOString();

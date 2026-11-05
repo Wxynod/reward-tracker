@@ -77,6 +77,7 @@
     payment:     ["swap",     "#2f6b55", "还款 / 转账"],
     fee:         ["percent",  "#8f8a82", "费用 / 利息"],
     income:      ["income",   "#2f6b55", "收入 / 返现"],
+    benefit:     ["gift",     "#2f6b55", "权益返现"],
     other:       ["tag",      "#9b9285", "其他"],
   };
 
@@ -150,6 +151,7 @@
   }
 
   function classify(t) {
+    if (window.RT_REWARDS?.isBenefitCredit(t)) return "benefit";
     // 还款、转账、费用、收入优先：这些交易的 MCC 没有意义
     if (["LOAN_PAYMENTS", "TRANSFER_IN", "TRANSFER_OUT", "BANK_FEES", "INCOME"].includes(t.category)) {
       return PFC_DETAIL[t.category_detail] || PFC_PRIMARY[t.category];

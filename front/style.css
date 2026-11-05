@@ -310,6 +310,7 @@ body.editing main { padding-bottom: 120px; }
   border-radius: 50%; object-fit: cover; background: #fff; border: 2px solid var(--paper);
 }
 .cat-name { color: var(--c); }
+.txn .warn { color: var(--seal); border-bottom: 1px dotted var(--seal); cursor: help; }
 
 .cat-bar { margin: 4px 0 6px; }
 .cat-stack { display: flex; height: 8px; border-radius: 4px; overflow: hidden; gap: 2px; background: var(--line); }

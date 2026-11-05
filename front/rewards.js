@@ -10,7 +10,8 @@
     citi_ty:    { name: "ThankYou Points",    short: "TYP", issuer: "Citi",             domain: "citi.com",             color: "#003B70", unit: "pts" },
     amex_mr:    { name: "Membership Rewards", short: "MR",  issuer: "American Express", domain: "americanexpress.com",  color: "#016FD0", unit: "pts" },
     amex_cash:  { name: "Reward Dollars",     short: "$",   issuer: "American Express", domain: "americanexpress.com",  color: "#016FD0", unit: "cash" },
-    barclays:   { name: "Cash Back",          short: "$",   issuer: "Barclays",         domain: "barclaysus.com",       color: "#00AEEF", unit: "cash" },
+    barclays:   { name: "Cash Back",          short: "$",   issuer: "Barclays",         domain: "barclays.com",         color: "#00AEEF", unit: "cash" },
+    marriott:   { name: "Marriott Bonvoy",    short: "MB",  issuer: "Marriott",         domain: "marriott.com",         color: "#B04A2F", unit: "pts" },
     apple_cash: { name: "Daily Cash",         short: "$",   issuer: "Apple",            domain: "apple.com",            color: "#1D1D1F", unit: "cash" },
   };
 
@@ -20,7 +21,7 @@
     flights: "机票", hotels: "酒店", car_rental: "租车", travel: "其他旅行",
     transit: "公共交通 / 打车", drugstore: "药店", streaming: "流媒体", phone_internet: "通讯 / 网络",
     medical: "医疗", home_improvement: "家装", fitness: "健身", entertainment: "现场娱乐",
-    portal: "银行旅行平台", merchant3: "Apple 3% 商户", other: "其他",
+    portal: "银行旅行平台", merchant3: "Apple 3% 商户", marriott: "万豪旗下酒店", other: "其他",
   };
 
   // MCC → 类别（区间含两端）
@@ -56,6 +57,10 @@
   };
   const PFC_PRIMARY = { MEDICAL: "medical", TRAVEL: "travel" };
 
+  // 卡片权益返现（Dining Credit、Uber Cash、Amex Offers 等）：是发卡行给的抵扣，不扣积分
+  const BENEFIT_CREDIT = /\b(dining|hotel|resort|property|airline|uber|digital entertainment|entertainment|saks|walmart\+?|clear|equinox|lululemon|oura|resy|streaming|travel|statement|platinum|brilliant|gold|offer)\b.*\bcredit\b|\bamex offer\b|\bcredit\b.*\b(amex|american express)\b/i;
+  const isBenefitCredit = (t) => t.amount < 0 && BENEFIT_CREDIT.test(`${t.name || ""} ${t.merchant || ""}`);
+
   // 不产生积分的交易（还款、转账、利息、费用）
   const NO_EARN_PRIMARY = new Set(["LOAN_PAYMENTS", "TRANSFER_IN", "TRANSFER_OUT", "BANK_FEES", "INCOME"]);
 
@@ -86,7 +91,9 @@
         { cats: ["portal"], rate: 5 },
         // 季度轮换 5%（需激活，每季合计 $1,500）。新季度公布后在这里加一行
         { cats: ["gas", "transit", "entertainment"], rate: 5, cap: 1500, period: "quarter", quarters: ["2026-Q3"], note: "Q3 轮换" },
-        { cats: ["dining", "grocery"], rate: 5, cap: 1500, period: "quarter", quarters: ["2026-Q4"], note: "Q4 轮换" },
+        // 2026 年 Q4（10–12 月）：超市 5x（1+4），餐饮 7x（1+4+2）；轮换额度合计 $1,500，用满后超市 1x、餐饮 3x
+        { cats: ["grocery", "dining"], rate: 5, rates: { dining: 7 }, after: { dining: 3 }, cap: 1500,
+          from: "2026-10-01", to: "2026-12-31", note: "Q4 轮换" },
         { cats: ["dining", "drugstore"], rate: 3 },
       ] },
     chase_other: { name: "Chase 其他卡", issuer: "Chase", program: "chase_ur", match: null, base: 1, rules: [] },
@@ -117,6 +124,14 @@
     citi_other: { name: "Citi 其他卡", issuer: "Citi", program: "citi_ty", match: null, base: 1, rules: [] },
 
     // ---------- Amex · Membership Rewards
+    bonvoy_brilliant: { name: "Marriott Bonvoy Brilliant", issuer: "American Express", program: "marriott",
+      match: /bonvoy\s*brilliant|marriott.*brilliant|brilliant/i, base: 2,
+      merchants: /marriott|ritz[- ]?carlton|st\.? ?regis|\bw hotels?\b|westin|sheraton|le m[eé]ridien|renaissance|courtyard|fairfield|residence inn|springhill|towneplace|aloft|moxy|four points|\belement\b|delta hotels|gaylord|autograph collection|tribute portfolio|luxury collection|edition hotel|design hotels|bulgari/i,
+      merchantCat: "marriott",
+      rules: [
+        { cats: ["marriott"], rate: 6 },
+        { cats: ["dining", "flights"], rate: 3 },   // 机票限直接向航司订
+      ] },
     amex_plat: { name: "Platinum Card", issuer: "American Express", program: "amex_mr", match: /platinum/i, base: 1,
       portal: /amex\s*travel|amextravel|american\s*express\s*travel/i, rules: [
         { cats: ["flights"], rate: 5, cap: 500000, period: "year" },
@@ -204,7 +219,7 @@
   function classify(t, product) {
     const text = `${t.merchant || ""} ${t.name || ""}`;
     if (product?.portal && product.portal.test(text)) return "portal";
-    if (product?.merchants && product.merchants.test(text)) return "merchant3";
+    if (product?.merchants && product.merchants.test(text)) return product.merchantCat || "merchant3";
     const c = (t.mcc && mccCat(t.mcc)) || PFC[t.category_detail] || PFC_PRIMARY[t.category];
     if (c === "grocery" && t.channel === "online") return "online_grocery_or_grocery";
     return c || "other";
@@ -267,6 +282,7 @@
       for (const t of list) {
         const key = ruleKey(t);
         const base = { cat: null, unit, program: product.program, product: pKey, key };
+        if (isBenefitCredit(t)) { out.set(t.id, { ...base, rate: 0, earned: 0, cat: "none", source: "权益返现，不扣积分" }); continue; }
         if (NO_EARN_PRIMARY.has(t.category)) { out.set(t.id, { ...base, rate: 0, earned: 0, cat: "none", source: "不计积分" }); continue; }
 
         const cat = classify(t, product);
@@ -290,17 +306,22 @@
             product.rules.forEach((r, i) => {
               if (done || !catMatches(r.cats, cat)) return;
               if (r.quarters && !r.quarters.includes(periodKey(t.date, "quarter"))) return;
+              if (r.from && t.date < r.from) return;
+              if (r.to && t.date > r.to) return;
+              const full = r.rates?.[cat] ?? r.rate;          // 本规则下该类别的倍数
+              const rest = r.after?.[cat] ?? product.base;    // 额度用满后的倍数
               if (r.cap && t.amount > 0) {
-                const u = `${i}|${periodKey(t.date, r.period || "year")}`;
+                // 有日期区间的规则整段共用一个额度；否则按 year / quarter / month 重置
+                const u = `${i}|${r.from ? "range" : periodKey(t.date, r.period || "year")}`;
                 const room = r.cap - (used[u] || 0);
                 if (room <= 0) return;
                 const eligible = Math.min(room, t.amount);
                 used[u] = (used[u] || 0) + eligible;
-                rate = (eligible * r.rate + (t.amount - eligible) * product.base) / t.amount;
+                rate = (eligible * full + (t.amount - eligible) * rest) / t.amount;
               } else {
-                rate = r.rate;
+                rate = full;
               }
-              source = `${catLabel(cat)} ${fmtRate(r.rate, unit)}${r.note ? " · " + r.note : ""}`;
+              source = `${catLabel(cat)} ${fmtRate(full, unit)}${r.note ? " · " + r.note : ""}`;
               done = true;
             });
           }
@@ -322,5 +343,5 @@
       ? (v < 0 ? "−$" : "$") + Math.abs(v).toFixed(2)
       : (v < 0 ? "−" : "") + Math.round(Math.abs(v)).toLocaleString("en-US");
 
-  window.RT_REWARDS = { PROGRAMS, PRODUCTS, CATS, guessProduct, issuerOf, compute, ruleKey, ruleKeyLabel, catLabel, fmtRate, fmtEarned };
+  window.RT_REWARDS = { isBenefitCredit, PROGRAMS, PRODUCTS, CATS, guessProduct, issuerOf, compute, ruleKey, ruleKeyLabel, catLabel, fmtRate, fmtEarned };
 })();
