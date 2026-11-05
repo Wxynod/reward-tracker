@@ -129,6 +129,7 @@ const ROUTES = {
       cards: r.cards && typeof r.cards === "object" ? r.cards : {},
       rules: r.rules && typeof r.rules === "object" ? r.rules : {},
       balances: r.balances && typeof r.balances === "object" ? r.balances : {},
+      closing: r.closing && typeof r.closing === "object" ? r.closing : {}, // 每张卡的账单日（1–31）
     };
     if (JSON.stringify(clean).length > 200_000) throw httpError(413, "rewards too large");
     await putJSON(env, "rewards", clean);
@@ -248,7 +249,7 @@ async function loadAll(env) {
   transactions.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
   const [benefits, rewards] = await Promise.all([
     getJSON(env, "benefits", []),
-    getJSON(env, "rewards", { cards: {}, rules: {}, balances: {} }),
+    getJSON(env, "rewards", { cards: {}, rules: {}, balances: {}, closing: {} }),
   ]);
   return { env: env.PLAID_ENV || "sandbox", items, transactions, benefits, rewards };
 }

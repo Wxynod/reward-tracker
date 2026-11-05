@@ -14,7 +14,29 @@ window.brandFail = (img) => {
   img.nextElementSibling?.remove();
   img.remove();
 };
-const EMPTY_REWARDS = () => ({ cards: {}, rules: {}, balances: {} });
+const EMPTY_REWARDS = () => ({ cards: {}, rules: {}, balances: {}, closing: {} });
+
+// ---------------------------------------------------------------- 账单周期
+// 账单日 day（1–31）在某个月的实际日期：小月取月底
+const closingIn = (y, m, day) => {
+  const last = new Date(Date.UTC(y, m, 0)).getUTCDate();   // m 为 1–12
+  return `${y}-${String(m).padStart(2, "0")}-${String(Math.min(day, last)).padStart(2, "0")}`;
+};
+// 在日期 ref（含）当天或之前最近的一次账单日；没设账单日时按自然月月底
+function lastClosing(acctId, ref) {
+  const day = Number(state.rewards.closing?.[acctId]) || 31;
+  let y = Number(ref.slice(0, 4)), m = Number(ref.slice(5, 7));
+  let c = closingIn(y, m, day);
+  if (c > ref) { m -= 1; if (!m) { m = 12; y -= 1; } c = closingIn(y, m, day); }
+  return c;
+}
+function nextClosing(acctId, ref) {
+  const day = Number(state.rewards.closing?.[acctId]) || 31;
+  let y = Number(ref.slice(0, 4)), m = Number(ref.slice(5, 7));
+  let c = closingIn(y, m, day);
+  if (c < ref) { m += 1; if (m > 12) { m = 1; y += 1; } c = closingIn(y, m, day); }
+  return c;
+}
 const state = {
   env: null, items: [], accounts: {}, txns: [], benefits: [],
   rewards: EMPTY_REWARDS(), earn: new Map(), logos: {},
@@ -447,14 +469,24 @@ function renderRewards() {
     const pk = productOf(a);
     if (!pk) continue;
     const prog = R.PRODUCTS[pk].program;
-    progs[prog] = progs[prog] || { month: 0, since: 0 };
+    progs[prog] = progs[prog] || { month: 0, posted: 0, pending: 0, next: null };
+    const nc = nextClosing(a.id, today());
+    if (!progs[prog].next || nc < progs[prog].next) progs[prog].next = nc;
     cards[a.id] = { a, pk, prog, spend: 0, earned: 0, cats: {} };
   }
   for (const t of state.txns) {
     const e = state.earn.get(t.id);
     if (!e || e.cat === "none") continue;
-    const since = balances[e.program]?.updated;
-    if (since && t.date > since) progs[e.program].since += e.earned;
+    // 账单周期：本期（上次账单日之后）= Pending；录入余额之后结算过的周期 = 已入账，加进 Balance
+    const g = progs[e.program];
+    if (g) {
+      const closedAt = lastClosing(t.account_id, today());
+      if (t.date > closedAt) g.pending += e.earned;
+      else {
+        const upd = balances[e.program]?.updated;
+        if (upd && t.date > lastClosing(t.account_id, upd)) g.posted += e.earned;
+      }
+    }
     if (!t.date.startsWith(month)) continue;
     progs[e.program].month += e.earned;
     const c = cards[t.account_id];
@@ -468,7 +500,7 @@ function renderRewards() {
   const ALWAYS = ["chase_ur", "citi_ty", "amex_mr", "marriott", "barclays", "apple_cash"];
   const keys = Object.keys(R.PROGRAMS).filter((k) => ALWAYS.includes(k) || progs[k] || balances[k]);
   const [y, m] = month.split("-");
-  $("#r-note").textContent = `${y} 年 ${Number(m)} 月 · Pending 为按卡片倍数估算的本月新增，以银行账单为准`;
+  $("#r-note").textContent = `Pending = 本期账单（上次账单日之后）的估算积分，过了账单日自动加进 Balance · 以银行账单为准`;
 
   const unknown = creditAccounts().filter((a) => /_other$/.test(productOf(a) || ""));
   $("#r-unknown").innerHTML = unknown.length ? `<div class="unknown-bar">
@@ -483,13 +515,13 @@ function renderRewards() {
     const balView = editing
       ? `<label class="bal-edit"><span>${p.unit === "cash" ? "$" : ""}</span><input type="number" step="${p.unit === "cash" ? "0.01" : "1"}" min="0" inputmode="decimal" data-bal="${k}" value="${esc(state.draft.balances[k] ?? b?.value ?? "")}" placeholder="输入总积分"><span>${unitTxt}</span></label>`
       : b
-        ? `<div class="pbal">${esc(R.fmtEarned(b.value, p.unit))}<small>${unitWord(k)}</small></div>`
+        ? `<div class="pbal">${esc(R.fmtEarned(b.value + (g?.posted || 0), p.unit))}<small>${unitWord(k)}</small></div>`
         : `<div class="pbal empty-bal">—<small>点 ⚙ →「更新」录入</small></div>`;
-    const since = g?.since || 0;
+    const posted = g?.posted || 0;
     const metaLine = editing
-      ? "保存后记为今天的余额"
+      ? "保存后记为今天的余额（填银行显示的已入账积分）"
       : b
-        ? `更新于 ${esc(b.updated)}${since ? ` · 含之后新增估算 <b>${esc(fmtBal(b.value + since, k))}</b>` : ""}`
+        ? `${esc(b.updated)} 录入 ${esc(fmtBal(b.value, k))}${posted ? ` · 之后已结算 +${esc(fmtBal(posted, k))}` : ""}`
         : "&nbsp;";
     return `<article class="program" style="--brand:${p.color}">
       <header>${programLogo(k)}<div><div class="pname">${esc(p.name)}</div><div class="pissuer">${esc(p.issuer)}</div></div></header>
@@ -497,8 +529,8 @@ function renderRewards() {
       ${balView}
       <div class="pmeta">${metaLine}</div>
       <div class="pmonth">
-        <span>Pending · ${Number(m)} 月</span>
-        ${g ? `<b>${g.month >= 0 ? "+" : ""}${esc(fmtBal(g.month, k))}</b>` : `<em>未关联卡片</em>`}
+        <span>Pending${g?.next ? ` · ${Number(g.next.slice(5, 7))}/${Number(g.next.slice(8))} 结算` : ""}</span>
+        ${g ? `<b>${g.pending >= 0 ? "+" : ""}${esc(fmtBal(g.pending, k))}</b>` : `<em>未关联卡片</em>`}
       </div>
     </article>`;
   }).join("");
@@ -546,7 +578,11 @@ function renderSettings() {
   $("#card-map").innerHTML = accts.length ? accts.map((a) => `
     <label class="map-row">
       <span>${esc(a.institution)} · ${esc(a.name)}${a.mask ? " ··" + esc(a.mask) : ""}</span>
-      <select data-map="${esc(a.id)}"><option value="">不计积分</option>${options(productOf(a))}</select>
+      <span class="map-controls">
+        <select data-map="${esc(a.id)}"><option value="">不计积分</option>${options(productOf(a))}</select>
+        <span class="closing-input" title="Statement closing date：每月几号出账单">账单日
+          <input type="number" min="1" max="31" inputmode="numeric" data-closing="${esc(a.id)}" value="${esc(state.rewards.closing?.[a.id] ?? "")}" placeholder="末"> 号</span>
+      </span>
     </label>`).join("") : `<p class="hint">还没有信用卡账户</p>`;
 
   const rules = [];
@@ -653,6 +689,14 @@ function bindRewards() {
   });
   document.addEventListener("change", (e) => {
     const el = e.target;
+    if (el.dataset.closing) {
+      const v = el.value === "" ? null : Math.round(Number(el.value));
+      if (v !== null && !(v >= 1 && v <= 31)) { toast("账单日填 1–31"); return; }
+      const next = JSON.parse(JSON.stringify(state.rewards));
+      next.closing = next.closing || {};
+      if (v === null) delete next.closing[el.dataset.closing]; else next.closing[el.dataset.closing] = v;
+      return saveRewards(next, v === null ? "已清除账单日（按月底结算）" : `账单日已设为每月 ${v} 号`);
+    }
     if (!el.dataset.map) return;
     const next = JSON.parse(JSON.stringify(state.rewards));
     next.cards[el.dataset.map] = el.value;

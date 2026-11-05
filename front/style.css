@@ -390,3 +390,12 @@ body.editing main { padding-bottom: 120px; }
 .rotation-items li { margin: 2px 0; }
 .rotation-items li::marker { color: #117ACA; }
 .benefit.auto:not(.done) .bar > i { background: #117ACA; }
+
+/* ------------------------------------------------ closing date */
+.map-controls { display: flex; gap: 8px; align-items: center; }
+.map-controls select { flex: 1; min-width: 0; }
+.closing-input { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; font-size: 12px; color: var(--muted); }
+.closing-input input {
+  width: 50px; border: 1px solid var(--line); border-radius: 6px; padding: 5px 6px;
+  background: #fff; color: var(--ink); text-align: center; font-size: 13px;
+}
