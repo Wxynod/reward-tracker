@@ -382,3 +382,11 @@ body.editing main { padding-bottom: 120px; }
   .programs { grid-auto-columns: 86%; }
   .scroll-btn { display: none !important; }
 }
+
+/* ------------------------------------------------ auto rotation task */
+.benefit.auto { border-left: 3px solid #117ACA; }
+.auto-tag { color: #117ACA; border-color: rgba(17, 122, 202, .35); margin-left: 0; }
+.rotation-items { margin: 10px 0 0; padding: 10px 0 0 18px; border-top: 1px dashed var(--line); font-size: 13px; color: var(--ink); }
+.rotation-items li { margin: 2px 0; }
+.rotation-items li::marker { color: #117ACA; }
+.benefit.auto:not(.done) .bar > i { background: #117ACA; }

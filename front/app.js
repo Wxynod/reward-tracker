@@ -252,14 +252,46 @@ function benefitProgress(b) {
   return { value: Math.max(0, hits.reduce((s, t) => s + t.amount, 0)), hits };
 }
 
+// 自动任务：信用卡季度轮换类别的额度进度（目前是 Freedom Flex），由积分引擎算出来
+function rotationCards(today) {
+  const shown = [];
+  for (const a of creditAccounts()) {
+    const pk = productOf(a);
+    const product = R.PRODUCTS[pk];
+    if (!product) continue;
+    for (const r of product.rules) {
+      if (!r.rotation || today < r.from || today > r.to) continue;
+      const hit = (state.earn.rotations || []).find((x) => x.account_id === a.id && x.title === r.rotation.title);
+      shown.push({ a, product, r, used: hit ? hit.used : 0 });
+    }
+  }
+  return shown.map(({ a, product, r, used }) => {
+    const pct = Math.min(100, (used / r.cap) * 100);
+    const done = used >= r.cap;
+    const daysLeft = Math.ceil((new Date(r.to) - new Date(today)) / 864e5);
+    const actLeft = Math.ceil((new Date(r.rotation.activateBy) - new Date(today)) / 864e5);
+    return `<div class="card benefit auto ${done ? "done" : ""}">
+      <div class="benefit-head">
+        <h3>${esc(product.name)} · ${esc(r.rotation.title)}</h3>
+        <span class="tag auto-tag">自动</span>
+      </div>
+      <div class="meta">${esc(a.name)}${a.mask ? " ··" + esc(a.mask) : ""} · ${esc(r.from)} 至 ${esc(r.to)}${actLeft >= 0 ? ` · 记得在 ${esc(r.rotation.activateBy)} 前激活` : ""}</div>
+      <div class="bar"><i style="width:${pct.toFixed(1)}%"></i></div>
+      <div class="nums"><span>${fmt(used)} / ${fmt(r.cap)}</span><span class="left">${done ? "额度已用满" : `还差 ${fmt(r.cap - used)} · 剩 ${daysLeft} 天`}</span></div>
+      <ul class="rotation-items">${r.rotation.items.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>
+    </div>`;
+  }).join("");
+}
+
 function renderBenefits() {
   const today = new Date().toISOString().slice(0, 10);
+  const auto = rotationCards(today);
   const list = [...state.benefits].sort((a, b) => a.end.localeCompare(b.end));
   if (!list.length) {
-    $("#benefit-list").innerHTML = `<div class="empty">还没有权益任务。例如开卡奖励的消费门槛、季度类别返现、每月 Uber / 餐饮 credit。</div>`;
+    $("#benefit-list").innerHTML = auto + `<div class="empty">还没有自定义权益任务。例如开卡奖励的消费门槛、每月 Uber / 餐饮 credit。</div>`;
     return;
   }
-  $("#benefit-list").innerHTML = list.map((b) => {
+  $("#benefit-list").innerHTML = auto + list.map((b) => {
     const { value } = benefitProgress(b);
     const target = Number(b.target) || 0;
     const pct = target ? Math.min(100, (value / target) * 100) : 0;

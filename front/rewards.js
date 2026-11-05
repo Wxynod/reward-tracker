@@ -90,10 +90,14 @@
       portal: /chase\s*travel/i, rules: [
         { cats: ["portal"], rate: 5 },
         // 季度轮换 5%（需激活，每季合计 $1,500）。新季度公布后在这里加一行
-        { cats: ["gas", "transit", "entertainment"], rate: 5, cap: 1500, period: "quarter", quarters: ["2026-Q3"], note: "Q3 轮换" },
+        { cats: ["gas", "transit", "entertainment"], rate: 5, cap: 1500, from: "2026-07-01", to: "2026-09-30", note: "Q3 轮换",
+          rotation: { title: "2026 Q3 5% 轮换", items: ["加油站和电动车充电", "公共交通", "部分现场娱乐", "United Way 捐款"], activateBy: "2026-09-14" } },
         // 2026 年 Q4（10–12 月）：超市 5x（1+4），餐饮 7x（1+4+2）；轮换额度合计 $1,500，用满后超市 1x、餐饮 3x
         { cats: ["grocery", "dining"], rate: 5, rates: { dining: 7 }, after: { dining: 3 }, cap: 1500,
-          from: "2026-10-01", to: "2026-12-31", note: "Q4 轮换" },
+          merchants: /american red cross|redcross/i,
+          from: "2026-10-01", to: "2026-12-31", note: "Q4 轮换",
+          rotation: { title: "2026 Q4 5% 轮换", activateBy: "2026-12-14",
+            items: ["餐厅（含外卖），合计 7x = 1 + 4 + 日常餐饮 2", "超市（不含 Walmart、Target），5x", "American Red Cross 捐款，5x"] } },
         { cats: ["dining", "drugstore"], rate: 3 },
       ] },
     chase_other: { name: "Chase 其他卡", issuer: "Chase", program: "chase_ur", match: null, base: 1, rules: [] },
@@ -243,6 +247,8 @@
   // 返回 Map<txnId, {rate, earned, cat, source, unit, program, product, key}>
   function compute(txns, accounts, settings) {
     const out = new Map();
+    const rotations = [];
+    out.rotations = rotations;
     const cards = settings.cards || {};
     const learned = settings.rules || {};
 
@@ -304,7 +310,7 @@
           }
           if (!done) {
             product.rules.forEach((r, i) => {
-              if (done || !catMatches(r.cats, cat)) return;
+              if (done || !(catMatches(r.cats, cat) || (r.merchants && r.merchants.test(`${t.merchant || ""} ${t.name || ""}`)))) return;
               if (r.quarters && !r.quarters.includes(periodKey(t.date, "quarter"))) return;
               if (r.from && t.date < r.from) return;
               if (r.to && t.date > r.to) return;
@@ -329,6 +335,10 @@
         const earned = unit === "cash" ? (t.amount * rate) / 100 : t.amount * rate;
         out.set(t.id, { ...base, cat, rate, earned, source });
       }
+      // 轮换类别的额度使用情况（给「权益任务」画进度条）
+      product.rules.forEach((r, i) => {
+        if (r.rotation) rotations.push({ account_id: acctId, product: pKey, ...r.rotation, from: r.from, to: r.to, cap: r.cap, used: used[`${i}|range`] || 0 });
+      });
     }
     return out;
   }
