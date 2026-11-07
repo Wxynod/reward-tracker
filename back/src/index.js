@@ -107,6 +107,23 @@ const ROUTES = {
     return { ok: true };
   },
 
+  // 让 Plaid 立刻去银行抓最新交易（含 Pending）。异步完成，几十秒后再 /api/sync 就能拿到。
+  // Trial 计划含 Refresh；按量付费计划下 /transactions/refresh 按次计费
+  "POST /api/refresh": async (env) => {
+    const ids = await getJSON(env, "items", []);
+    const results = [];
+    for (const id of ids) {
+      const item = await getItem(env, id);
+      try {
+        await plaid(env, "/transactions/refresh", { access_token: item.access_token });
+        results.push({ institution: item.institution, ok: true });
+      } catch (e) {
+        results.push({ institution: item.institution, ok: false, error: e.plaid?.code || e.message });
+      }
+    }
+    return { results };
+  },
+
   // 全量重新拉取：cursor 清零，重建交易缓存（用来补齐旧交易缺的 MCC 等字段；/transactions/sync 不按次计费）
   "POST /api/resync": async (env) => {
     const ids = await getJSON(env, "items", []);

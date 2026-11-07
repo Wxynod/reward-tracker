@@ -762,6 +762,21 @@ async function saveEdit() {
   await saveRewards(next, `已保存：${parts.join("，")}`);
 }
 
+// 让 Plaid 马上去银行抓数据，然后分两次自动同步（银行慢的话第二次能补上）
+async function refreshFromBank() {
+  const btn = $("#btn-refresh");
+  btn.disabled = true; btn.textContent = "已请求银行刷新…";
+  try {
+    const { results } = await api("/api/refresh", { method: "POST" });
+    const bad = results.filter((r) => !r.ok);
+    toast(bad.length ? `${bad.map((r) => r.institution).join("、")} 刷新失败：${bad[0].error}` : "已请求刷新，约 1 分钟后自动同步");
+    setTimeout(sync, 45000);
+    setTimeout(() => { sync(); btn.disabled = false; btn.textContent = "立刻从银行刷新"; }, 120000);
+  } catch (e) {
+    toast(e.message); btn.disabled = false; btn.textContent = "立刻从银行刷新";
+  }
+}
+
 async function resync() {
   const btn = $("#btn-resync");
   if (!confirm("重新拉取所有银行的全部交易？需要一点时间。")) return;
@@ -803,6 +818,7 @@ function bindRewards() {
   $("#btn-edit-save").addEventListener("click", saveEdit);
   $("#btn-edit-cancel").addEventListener("click", () => setEditing(false));
   $("#btn-resync").addEventListener("click", resync);
+  $("#btn-refresh").addEventListener("click", refreshFromBank);
 
   document.addEventListener("input", (e) => {
     const el = e.target;

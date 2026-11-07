@@ -59,6 +59,8 @@
           </section>
           <section>
             <h4>数据</h4>
+            <p class="hint">「同步」只拿 Plaid 已经缓存的数据，Plaid 一般每天去银行抓几次。刚刷的卡（Pending）没出现时，可以让 Plaid 立刻去银行抓一次。</p>
+            <button id="btn-refresh" class="btn primary wide" style="margin-bottom:10px">立刻从银行刷新</button>
             <p class="hint">旧交易没有存 MCC。重新拉取一次全部交易即可补齐（不额外计费）。</p>
             <button id="btn-resync" class="btn wide">重新拉取全部交易</button>
           </section>
