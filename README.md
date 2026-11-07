@@ -53,6 +53,54 @@ npx wrangler deploy
 3. 重新连接银行（Sandbox 的连接在 Production 下无效，可以先在「账户」里断开）
 4. 走 OAuth 的银行（Chase、Capital One 等）：在 Plaid Dashboard 的 Allowed redirect URIs 里加上 `https://wxynod.github.io/reward-tracker/`，并填到 `PLAID_REDIRECT_URI`
 
+## 四、Apple Card（iOS 快捷指令推送）
+
+Apple Card 由 Goldman Sachs 发卡，Plaid 连不上；Apple 的 FinanceKit 只批给 App Store 上架的公司级 App。
+所以改用 iOS 快捷指令：每次用 Apple Pay 付款，手机自动把商户、金额、时间 POST 给 Worker。
+只能拿到这三项，**没有 MCC、余额，也抓不到实体卡 / 卡号消费**。积分按 Apple Card 的 Apple Pay 2%（Apple 3% 商户按商户名识别）估算。
+
+**1. Worker 加一个密钥并重新部署**（在 `back/` 下）
+
+```bash
+node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"   # 生成一串，记下来
+npx wrangler secret put APPLE_INGEST_TOKEN   # 粘贴上面那串
+npx wrangler deploy
+```
+
+先用 curl 试一下（应返回 `{"ok":true,...}`，网页上会出现 Apple Card 账户和这笔测试交易，看到后在交易明细里点「删除这笔交易」）：
+
+```bash
+curl -X POST https://reward-tracker.tom-rt.workers.dev/api/ingest/apple-card \
+  -H "Authorization: Bearer <APPLE_INGEST_TOKEN>" -H "Content-Type: application/json" \
+  -d '{"merchant":"Test","amount":"$1.23","date":"2026-11-08T10:00:00+08:00"}'
+```
+
+**2. iPhone 上建自动化**（快捷指令 App；不同 iOS 版本的按钮名称可能略有出入）
+
+1. 「自动化」→ 右上角「+」→ 选「钱包 / Wallet」
+2. 卡片勾选 **Apple Card**，类别全选 →「立即运行」（关掉「运行前询问」）→ 下一步 →「新建空白快捷指令」
+3. 添加操作 **「获取 URL 内容」**：
+   - URL：`https://reward-tracker.tom-rt.workers.dev/api/ingest/apple-card`
+   - 展开 → 方法 **POST**
+   - 头部：`Authorization` = `Bearer <APPLE_INGEST_TOKEN>`（Bearer 后面有一个空格）
+   - 请求体选 **JSON**，加 4 个文本字段：
+
+     | 键 | 值（点变量选择） |
+     |---|---|
+     | `merchant` | 快捷指令输入 → **商户** |
+     | `amount` | 快捷指令输入 → **金额** |
+     | `card` | 快捷指令输入 → **名称**（卡名，可不加） |
+     | `date` | **当前日期** → 点它把日期格式改成 **ISO 8601**，并打开「包括时间」 |
+
+   `date` 一定要传：不传的话 Worker 按 UTC 记日期，北京时间早上 8 点前的消费会被记到前一天。
+4. （调试用，可选）再加一个「显示通知」，内容选上一步的「URL 的内容」，确认能看到 `"ok":true` 后删掉
+
+**说明**
+- 同一分钟、同金额、同商户的重复推送会自动合并
+- 退款、还款、实体卡消费不会推送；推错的交易在网页交易明细底部「删除这笔交易」
+- 账户页 Apple Card 的「清空」会删掉所有推送记录（不影响以后继续推送）
+- 密钥泄露了就 `wrangler secret put APPLE_INGEST_TOKEN` 换一个，再更新快捷指令
+
 ## API
 
 除 `/api/login` 外都需要带 `Authorization: Bearer <登录令牌>`。
@@ -69,6 +117,8 @@ npx wrangler deploy
 | POST | /api/resync | 清空 cursor，重新拉取全部交易（补齐 MCC 等新字段） |
 | PUT | /api/rewards | 保存积分设置：卡片对应、记住的倍数、各计划余额 |
 | GET | /api/logos | 各银行 logo（Plaid 机构信息，KV 缓存 30 天） |
+| POST | /api/ingest/apple-card | **iOS 快捷指令用**，带 `Authorization: Bearer <APPLE_INGEST_TOKEN>`（不是登录令牌） |
+| POST | /api/manual/delete | `{id}` 删除一笔快捷指令推送的交易 |
 
 ## 积分估算
 

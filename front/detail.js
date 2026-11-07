@@ -118,7 +118,7 @@
     ].join(""));
 
     const secCat = section("分类", [
-      row("MCC", t.mcc ? `<span class="mcc">${esc(t.mcc)}</span> ${esc(mccName(t.mcc) || "")}` : "<small>银行没有提供（Plaid 的 MCC 仍是 beta 字段）</small>"),
+      row("MCC", d.source === "shortcut" ? "<small>iOS 快捷指令推送的交易没有 MCC</small>" : t.mcc ? `<span class="mcc">${esc(t.mcc)}</span> ${esc(mccName(t.mcc) || "")}` : "<small>银行没有提供（Plaid 的 MCC 仍是 beta 字段）</small>"),
       row("本站类别", `<span class="dot" style="background:${ic.color}"></span>${esc(ic.label)}`),
       row("Plaid 大类", pfc.primary ? `${esc(PFC_ZH[pfc.primary] || pretty(pfc.primary))} <small>${esc(pfc.primary)}</small>` : (t.category ? esc(t.category) : "")),
       row("Plaid 细类", pfc.detailed ? `${esc(pretty(pfc.detailed.replace(pfc.primary + "_", "")))} <small>${esc(pfc.detailed)}</small>` : ""),
@@ -154,7 +154,13 @@
         <pre>${esc(raw)}</pre>
       </details>`;
 
-    return head + strip + timeline + `<div class="d-grid">${secTxn}${secMerchant}${secCat}${secPay}</div>` + secCp + secEarn + secRaw;
+    const secManual = d.source === "shortcut" ? `<section class="d-sec"><h4>来源</h4><dl>
+        ${row("推送方式", "iOS 快捷指令（Apple Pay 付款时自动推送）")}
+        ${row("卡片", d.card ? esc(d.card) : "")}
+        ${row("原始金额", d.raw_amount ? `<code>${esc(d.raw_amount)}</code>` : "", { mono: true })}
+      </dl><button class="btn small ghost" data-del-manual="${esc(t.id)}" style="margin-top:8px">删除这笔交易</button></section>` : "";
+
+    return head + strip + timeline + `<div class="d-grid">${secTxn}${secMerchant}${secCat}${secPay}</div>` + secCp + secManual + secEarn + secRaw;
   }
 
   // ------------------------------------------------------------ 打开 / 关闭
@@ -181,6 +187,13 @@
       if (e.target.closest("[data-close]")) return close();
       const st = e.target.closest("[data-step]");
       if (st) return step(+st.dataset.step);
+      const del = e.target.closest("[data-del-manual]");
+      if (del) {
+        if (!confirm("删除这笔快捷指令推送的交易？")) return;
+        api("/api/manual/delete", { method: "POST", body: { id: del.dataset.delManual } })
+          .then((data) => { close(); ingest(data); toast("已删除"); }, (err) => toast(err.message));
+        return;
+      }
       if (e.target.closest("[data-copy-raw]")) {
         const pre = el.querySelector(".d-raw pre");
         navigator.clipboard?.writeText(pre.textContent).then(() => toast("已复制"), () => {});

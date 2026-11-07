@@ -144,7 +144,7 @@ function resumeOAuth() {
 }
 
 async function removeItem(itemId, name) {
-  if (!confirm(`断开 ${name}？本地存的该银行交易也会删除。`)) return;
+  if (!confirm(itemId === "apple" ? "清空所有快捷指令推送的 Apple Card 交易？之后新的推送会重新记录。" : `断开 ${name}？本地存的该银行交易也会删除。`)) return;
   try { await api("/api/items/remove", { method: "POST", body: { item_id: itemId } }); await load(); toast("已断开"); }
   catch (e) { toast(e.message); }
 }
@@ -408,7 +408,7 @@ function renderAccounts() {
         <h3 class="with-logo">${instLogo(it.institution)}${esc(it.institution)}</h3>
         <div>
           ${it.error ? `<button class="btn small primary" data-relink="${esc(it.item_id)}">重新连接</button>` : ""}
-          <button class="btn small ghost" data-remove="${esc(it.item_id)}" data-name="${esc(it.institution)}">断开</button>
+          <button class="btn small ghost" data-remove="${esc(it.item_id)}" data-name="${esc(it.institution)}" title="${it.manual ? "删除所有快捷指令推送的 Apple Card 交易" : ""}">${it.manual ? "清空" : "断开"}</button>
         </div>
       </div>
       ${it.error ? `<div class="err">${esc(it.error.code)}：${esc(it.error.message)}</div>` : ""}
@@ -425,7 +425,9 @@ function renderAccounts() {
           ${a.type === "credit" && a.limit ? limitBar(a) : ""}
         </div>`;
       }).join("")}
-      <div class="hint" style="margin-top:8px">上次同步：${it.last_synced ? new Date(it.last_synced).toLocaleString("zh-CN") : "尚未同步"}</div>
+      <div class="hint" style="margin-top:8px">${it.manual
+        ? `iOS 快捷指令推送 · 只记录 Apple Pay 交易，没有余额和 MCC · 最近推送：${it.last_synced ? new Date(it.last_synced).toLocaleString("zh-CN") : "—"}`
+        : `上次同步：${it.last_synced ? new Date(it.last_synced).toLocaleString("zh-CN") : "尚未同步"}`}</div>
     </div>`).join("");
 }
 
