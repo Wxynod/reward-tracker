@@ -594,3 +594,36 @@ body.editing main { padding-bottom: 120px; }
 .acct > div:first-child { min-width: 0; overflow-wrap: anywhere; }
 .acct > div:nth-child(2) { white-space: nowrap; }
 .acct .limit { grid-column: 1 / -1; }
+
+/* ------------------------------------------------ pending + payment channel tags */
+.txn-main { min-width: 0; }
+.txn .title { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.txn .tname { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ttags { display: inline-flex; gap: 4px; flex: none; }
+.ttag {
+  display: inline-flex; align-items: center; gap: 3px; height: 18px; padding: 0 7px;
+  border-radius: 9px; font-size: 11px; line-height: 1; font-weight: 500; white-space: nowrap;
+  color: var(--tc); background: color-mix(in srgb, var(--tc) 11%, #fff);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tc) 28%, transparent);
+}
+.ttag.store   { --tc: #2a6fc4; }
+.ttag.online  { --tc: #1f8a52; }
+.ttag.other   { --tc: #c4497f; }
+.ttag.pending { --tc: #7d776d; background: transparent; box-shadow: inset 0 0 0 1px #c9c2b6; border: 0; }
+.ttag.pending::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: #b3ab9e; animation: pend 1.6s ease-in-out infinite; }
+@keyframes pend { 50% { opacity: .3; } }
+
+/* 待入账：整行灰掉（图标去色、文字和金额变浅），一眼和已入账区分 */
+.txn.is-pending { background: repeating-linear-gradient(135deg, transparent 0 8px, rgba(138, 130, 118, .045) 8px 16px); }
+.txn.is-pending .cat-icon { filter: grayscale(1); opacity: .55; }
+.txn.is-pending .tname,
+.txn.is-pending .amt,
+.txn.is-pending .meta,
+.txn.is-pending .meta .cat-name { color: #9b9488 !important; }
+.txn.is-pending .ttag:not(.pending) { filter: grayscale(.85); opacity: .7; }
+.txn.is-pending .earn { filter: grayscale(1); opacity: .6; }
+
+@media (max-width: 560px) {
+  .txn .title { flex-wrap: wrap; row-gap: 3px; }
+  .txn .tname { white-space: normal; }
+}

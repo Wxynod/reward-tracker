@@ -239,6 +239,15 @@ function renderTxns() {
   B.searchPending(() => renderTxns());
 }
 
+const CHANNELS = {
+  "in store": { cls: "store", label: "线下", tip: "In store：在实体店刷卡 / 拍卡",
+    icon: '<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10v10h16V10M3 10l2-6h14l2 6M9 20v-6h6v6"/></svg>' },
+  online: { cls: "online", label: "线上", tip: "Online：网购、App 或订阅扣款",
+    icon: '<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.6 3.6 5.6 3.6 9s-1.1 6.4-3.6 9c-2.5-2.6-3.6-5.6-3.6-9s1.1-6.4 3.6-9Z"/></svg>' },
+  other: { cls: "other", label: "其他", tip: "Other：无法判断渠道，常见于还款、转账、费用",
+    icon: '<svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor"><circle cx="6" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="18" cy="12" r="1.8"/></svg>' },
+};
+
 function txnRow(t) {
   const title = t.merchant || t.name;
   const a = state.accounts[t.account_id];
@@ -251,10 +260,14 @@ function txnRow(t) {
          referrerpolicy="strict-origin-when-cross-origin" onload="brandLoaded(this)" onerror="brandFail(this)">
        <span class="cat-dot">${I.svg(ic.icon)}</span>`
     : "";
-  return `<div class="txn">
+  // 支付渠道（Plaid payment_channel）：in store 线下 / online 线上 / other 其他；待入账整行变灰
+  const ch = CHANNELS[t.channel] || null;
+  const tags = `${t.pending ? '<span class="ttag pending" title="Pending：银行已授权、尚未入账，金额和商户名可能还会变">待入账</span>' : ""}` +
+    (ch ? `<span class="ttag ${ch.cls}" title="${ch.tip}">${ch.icon}${ch.label}</span>` : "");
+  return `<div class="txn${t.pending ? " is-pending" : ""}">
     <div class="cat-icon" style="--c:${ic.color}" title="${esc(ic.label)}${t.mcc ? " · MCC " + esc(t.mcc) : ""}">${I.svg(ic.icon)}${brand}</div>
-    <div>
-      <div class="title">${esc(title)}${t.pending ? '<span class="tag">待入账</span>' : ""}</div>
+    <div class="txn-main">
+      <div class="title"><span class="tname">${esc(title)}</span>${tags ? `<span class="ttags">${tags}</span>` : ""}</div>
       <div class="meta"><span class="cat-name" style="--c:${ic.color}">${esc(ic.label)}</span>${a ? esc(` · ${cardNameMask(a)}`) : ' · <span class="warn" title="这笔交易的账户不在当前账户列表里，点 ⚙ → 重新拉取全部交易">未知账户</span>'}</div>
     </div>
     <div class="right">
