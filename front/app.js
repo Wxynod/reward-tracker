@@ -264,7 +264,7 @@ function txnRow(t) {
   const ch = CHANNELS[t.channel] || null;
   const tags = `${t.pending ? '<span class="ttag pending" title="Pending：银行已授权、尚未入账，金额和商户名可能还会变">待入账</span>' : ""}` +
     (ch ? `<span class="ttag ${ch.cls}" title="${ch.tip}">${ch.icon}${ch.label}</span>` : "");
-  return `<div class="txn${t.pending ? " is-pending" : ""}">
+  return `<div class="txn${t.pending ? " is-pending" : ""}" data-txn="${esc(t.id)}" tabindex="0" role="button" aria-label="查看 ${esc(title)} 的明细">
     <div class="cat-icon" style="--c:${ic.color}" title="${esc(ic.label)}${t.mcc ? " · MCC " + esc(t.mcc) : ""}">${I.svg(ic.icon)}${brand}</div>
     <div class="txn-main">
       <div class="title"><span class="tname">${esc(title)}</span>${tags ? `<span class="ttags">${tags}</span>` : ""}</div>

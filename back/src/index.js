@@ -230,7 +230,7 @@ async function pullAll(env, item) {
   const out = { added: [], modified: [], removed: [], accounts: null, cursor: item.cursor };
   let hasMore = true;
   while (hasMore) {
-    const req = { access_token: item.access_token, count: 500 };
+    const req = { access_token: item.access_token, count: 500, options: { include_original_description: true } };
     if (out.cursor) req.cursor = out.cursor;
     const d = await plaid(env, "/transactions/sync", req);
     out.added.push(...d.added);
@@ -285,9 +285,42 @@ const slimTxn = (t) => ({
   mcc: t.merchant_category_code || null, // 4 位 MCC（Plaid beta 字段，部分交易为空）
   channel: t.payment_channel || null,
   website: t.website || t.counterparties?.find((c) => c.website)?.website || null, // 用来找品牌 logo
+  detail: txnDetail(t), // 交易明细弹窗用：Plaid 返回的其余字段（空值省略）
   pending: !!t.pending,
   logo: t.logo_url || null,
 });
+
+// 去掉 null / 空字符串 / 空数组 / 空对象，减小 KV 体积
+function compact(v) {
+  if (Array.isArray(v)) { const a = v.map(compact).filter((x) => x !== undefined); return a.length ? a : undefined; }
+  if (v && typeof v === "object") {
+    const o = {};
+    for (const [k, x] of Object.entries(v)) { const c = compact(x); if (c !== undefined) o[k] = c; }
+    return Object.keys(o).length ? o : undefined;
+  }
+  return v === null || v === "" ? undefined : v;
+}
+
+const txnDetail = (t) => compact({
+  original_description: t.original_description,
+  authorized_datetime: t.authorized_datetime,
+  datetime: t.datetime,
+  pending_transaction_id: t.pending_transaction_id,
+  transaction_type: t.transaction_type,
+  transaction_code: t.transaction_code,
+  check_number: t.check_number,
+  account_owner: t.account_owner,
+  merchant_entity_id: t.merchant_entity_id,
+  unofficial_currency_code: t.unofficial_currency_code,
+  location: t.location,
+  payment_meta: t.payment_meta,
+  personal_finance_category: t.personal_finance_category,
+  category_icon: t.personal_finance_category_icon_url,
+  counterparties: t.counterparties?.map((c) => ({
+    name: c.name, type: c.type, entity_id: c.entity_id, website: c.website, logo_url: c.logo_url,
+    confidence_level: c.confidence_level, phone_number: c.phone_number,
+  })),
+}) || {};
 
 const slimAccount = (a) => ({
   id: a.account_id,
