@@ -174,6 +174,31 @@
     document.documentElement.classList.remove("d-lock");
     setTimeout(() => { el.hidden = true; }, 220);
   }
+  // 卡面选项（上传照片 / 官方卡面 / 本站设计），选卡面面板和账户详情共用
+  function chooserHTML(a) {
+    const cur = choice(a);
+    const list = stylesFor(a);
+    const rec = (PRODUCT_STYLES[productKey(a)] || []).length || 3;
+    const tile = (sid, label, extra = "") => `<button class="fp-tile ${sid === cur ? "on" : ""}" data-face="${sid}">${face(a, "md", sid)}<span>${label}${extra}</span></button>`;
+    return `
+    <h4>你的卡片照片</h4>
+    <div class="fp-grid">
+      ${images[a.id] ? tile("upload", "我上传的照片", ' <em data-fp-del title="删除照片">删除</em>') : ""}
+      <label class="fp-upload">
+        <input type="file" accept="image/*" hidden>
+        <span class="fp-plus">＋</span>
+        <span>${images[a.id] ? "换一张照片" : "上传卡面照片"}<small>竖版会自动转成横版</small></span>
+      </label>
+    </div>
+    ${artFor(a).length ? `<h4>官方卡面</h4><div class="fp-grid">${artFor(a).map(([n, label]) => tile(`art:${n}`, label)).join("")}</div>` : ""}
+    ${allArt().length > artFor(a).length ? `<details class="fp-more"><summary>图库里的其他卡面（${allArt().length - artFor(a).length}）</summary><div class="fp-grid">${allArt().filter(([n]) => !artFor(a).some(([m]) => m === n)).map(([n, label]) => tile(`art:${n}`, label)).join("")}</div></details>` : ""}
+    <h4>本站设计 · 推荐</h4>
+    <div class="fp-grid">${list.slice(0, rec).map((s) => tile(s, LIB[s].name)).join("")}</div>
+    <h4>本站设计 · 更多</h4>
+    <div class="fp-grid">${list.slice(rec).map((s) => tile(s, LIB[s].name)).join("")}</div>
+`;
+  }
+
   function renderPicker() {
     const el = document.getElementById("face-picker");
     const a = state.accounts[el.dataset.acct];
@@ -190,21 +215,7 @@
         </header>
         <div class="fp-preview">${face(a, "lg")}</div>
         <div class="fp-body">
-          <h4>你的卡片照片</h4>
-          <div class="fp-grid">
-            ${images[a.id] ? tile("upload", "我上传的照片", ' <em data-fp-del title="删除照片">删除</em>') : ""}
-            <label class="fp-upload">
-              <input type="file" accept="image/*" hidden>
-              <span class="fp-plus">＋</span>
-              <span>${images[a.id] ? "换一张照片" : "上传卡面照片"}<small>竖版会自动转成横版</small></span>
-            </label>
-          </div>
-          ${artFor(a).length ? `<h4>官方卡面</h4><div class="fp-grid">${artFor(a).map(([n, label]) => tile(`art:${n}`, label)).join("")}</div>` : ""}
-          ${allArt().length > artFor(a).length ? `<details class="fp-more"><summary>图库里的其他卡面（${allArt().length - artFor(a).length}）</summary><div class="fp-grid">${allArt().filter(([n]) => !artFor(a).some(([m]) => m === n)).map(([n, label]) => tile(`art:${n}`, label)).join("")}</div></details>` : ""}
-          <h4>本站设计 · 推荐</h4>
-          <div class="fp-grid">${list.slice(0, rec).map((s) => tile(s, LIB[s].name)).join("")}</div>
-          <h4>本站设计 · 更多</h4>
-          <div class="fp-grid">${list.slice(rec).map((s) => tile(s, LIB[s].name)).join("")}</div>
+          ${chooserHTML(a)}
         </div>
       </div>`;
   }
@@ -213,19 +224,28 @@
     next.cardface = next.cardface || {};
     next.cardface[acctId] = sid;
     await saveRewards(next, "卡面已更新");
-    if (!document.getElementById("face-picker").hidden) renderPicker();
+    notify();
+  }
+  const listeners = new Set();
+  function notify() {
+    const fp = document.getElementById("face-picker");
+    if (fp && !fp.hidden) renderPicker();
+    listeners.forEach((fn) => fn());
   }
   async function onPickerClick(e) {
     const el = document.getElementById("face-picker");
-    const id = el.dataset.acct;
     if (e.target.closest("[data-fp-close]")) return closePicker();
+    return handleChooserClick(e, el.dataset.acct);
+  }
+  // 卡面选项的点击 / 上传（任何容器里都能用）
+  async function handleChooserClick(e, id) {
     if (e.target.closest("[data-fp-del]")) {
       e.preventDefault(); e.stopPropagation();
       try {
         await api("/api/cardimg", { method: "PUT", body: { account_id: id, data: null } });
         delete images[id];
         if (state.rewards.cardface?.[id] === "upload") await setFace(id, stylesFor(state.accounts[id])[0]);
-        else { render(); renderPicker(); }
+        else { render(); notify(); }
         toast("已删除照片");
       } catch (err) { toast(err.message); }
       return;
@@ -233,10 +253,10 @@
     const t = e.target.closest("[data-face]");
     if (t) setFace(id, t.dataset.face);
   }
-  async function onPickerFile(e) {
+  function onPickerFile(e) { return handleChooserFile(e, document.getElementById("face-picker").dataset.acct); }
+  async function handleChooserFile(e, id) {
     const input = e.target;
     if (input.type !== "file" || !input.files[0]) return;
-    const id = document.getElementById("face-picker").dataset.acct;
     try {
       toast("正在处理照片…");
       const data = await processPhoto(input.files[0]);
@@ -288,7 +308,7 @@
   document.addEventListener("click", (e) => {
     if (!e.target.closest(".csel")) document.querySelectorAll(".csel.open").forEach((w) => w.classList.remove("open"));
     const f = e.target.closest("[data-face-acct]");
-    if (f) openPicker(f.dataset.faceAcct);
+    if (f) { e.stopPropagation(); window.RT_ACCT ? RT_ACCT.open(f.dataset.faceAcct, { face: true }) : openPicker(f.dataset.faceAcct); }
   });
   document.addEventListener("keydown", (e) => {
     if (e.key !== "Escape") return;
@@ -297,5 +317,8 @@
     if (fp && !fp.hidden) { e.stopPropagation(); closePicker(); }
   }, true);
 
-  window.RT_CARDS = { face, enhanceAll, loadImages, openPicker, get loaded() { return imagesLoaded; } };
+  window.RT_CARDS = {
+    face, enhanceAll, loadImages, openPicker, chooserHTML, handleChooserClick, handleChooserFile,
+    onChange: (fn) => listeners.add(fn), get loaded() { return imagesLoaded; },
+  };
 })();

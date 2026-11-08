@@ -22,16 +22,35 @@ const closingIn = (y, m, day) => {
   const last = new Date(Date.UTC(y, m, 0)).getUTCDate();   // m 为 1–12
   return `${y}-${String(m).padStart(2, "0")}-${String(Math.min(day, last)).padStart(2, "0")}`;
 };
+// 账单日：手动设置优先；否则用 Plaid Liabilities 的「上期出账日」自动推出；都没有按月底
+function closingDay(acctId) {
+  const manual = Number(state.rewards.closing?.[acctId]);
+  if (manual) return { day: manual, source: "manual" };
+  const iss = state.accounts[acctId]?.liability?.last_statement_issue_date;
+  if (iss) return { day: Number(iss.slice(8, 10)), source: "auto", from: iss };
+  return { day: 31, source: "default" };
+}
+// 还款状态：距离还款日几天、本期是否已还
+function dueInfo(a) {
+  const L = a?.liability;
+  if (!L?.next_payment_due_date) return null;
+  const days = Math.ceil((new Date(L.next_payment_due_date + "T00:00:00") - new Date(new Date().toDateString())) / 864e5);
+  const paid = !!(L.last_payment_date && L.last_statement_issue_date && L.last_payment_date > L.last_statement_issue_date &&
+    (L.last_payment_amount ?? 0) >= Math.min(L.minimum_payment_amount ?? 0, L.last_statement_balance ?? 0));
+  const nothing = (L.last_statement_balance ?? 0) <= 0;
+  const level = L.is_overdue ? "overdue" : paid || nothing ? "paid" : days <= 3 ? "urgent" : days <= 7 ? "soon" : "ok";
+  return { ...L, days, paid, nothing, level };
+}
 // 在日期 ref（含）当天或之前最近的一次账单日；没设账单日时按自然月月底
 function lastClosing(acctId, ref) {
-  const day = Number(state.rewards.closing?.[acctId]) || 31;
+  const day = closingDay(acctId).day;
   let y = Number(ref.slice(0, 4)), m = Number(ref.slice(5, 7));
   let c = closingIn(y, m, day);
   if (c > ref) { m -= 1; if (!m) { m = 12; y -= 1; } c = closingIn(y, m, day); }
   return c;
 }
 function nextClosing(acctId, ref) {
-  const day = Number(state.rewards.closing?.[acctId]) || 31;
+  const day = closingDay(acctId).day;
   let y = Number(ref.slice(0, 4)), m = Number(ref.slice(5, 7));
   let c = closingIn(y, m, day);
   if (c < ref) { m += 1; if (m > 12) { m = 1; y += 1; } c = closingIn(y, m, day); }
@@ -103,9 +122,9 @@ async function sync() {
 
 // ---------------------------------------------------------------- plaid link
 
-async function connect(itemId = null) {
+async function connect(itemId = null, { liabilities = false } = {}) {
   try {
-    const { link_token } = await api("/api/link-token", { method: "POST", body: { item_id: itemId } });
+    const { link_token } = await api("/api/link-token", { method: "POST", body: { item_id: itemId, add_liabilities: liabilities } });
     sessionStorage.setItem("rt_link", JSON.stringify({ token: link_token, itemId }));
     openLink(link_token, itemId);
   } catch (e) { toast(e.message); }
@@ -183,6 +202,7 @@ function render() {
   renderAccounts();
   window.RT_ANALYTICS?.render();
   window.RT_CARDS?.enhanceAll();
+  window.RT_ACCT?.refresh();
 }
 
 function renderAccountSelects() {
@@ -410,6 +430,7 @@ function renderAccounts() {
         <h3 class="with-logo">${instLogo(it.institution)}${esc(it.institution)}</h3>
         <div>
           ${it.error ? `<button class="btn small primary" data-relink="${esc(it.item_id)}">重新连接</button>` : ""}
+          ${!it.error && it.liab_status === "consent_required" ? `<button class="btn small" data-liab="${esc(it.item_id)}" title="授权后可自动获取账单日、还款日、最低还款和 APR">授权账单信息</button>` : ""}
           <button class="btn small ghost" data-remove="${esc(it.item_id)}" data-name="${esc(it.institution)}">断开</button>
         </div>
       </div>
@@ -418,9 +439,9 @@ function renderAccounts() {
         const name = cardName(a);
         const sub = name !== a.name ? a.name : (a.official_name || a.subtype || "");
         return `
-        <div class="acct${a.type === "credit" || a.type === "depository" ? " has-face" : ""}">
-          ${a.type === "credit" || a.type === "depository" ? `<button class="acct-face" data-face-acct="${esc(a.id)}" title="更换卡面" aria-label="更换 ${esc(name)} 的卡面">${RT_CARDS.face(state.accounts[a.id] || a, "sm")}<span>更换卡面</span></button>` : ""}
-          <div><div>${esc(name)}${a.mask ? " ··" + esc(a.mask) : ""}</div><div class="meta">${esc(sub)}</div></div>
+        <div class="acct${a.type === "credit" || a.type === "depository" ? " has-face" : ""}" data-acct="${esc(a.id)}" tabindex="0" role="button" aria-label="查看 ${esc(name)} 的账户详情">
+          ${a.type === "credit" || a.type === "depository" ? `<span class="acct-face">${RT_CARDS.face(state.accounts[a.id] || a, "sm")}</span>` : ""}
+          <div><div>${esc(name)}${a.mask ? " ··" + esc(a.mask) : ""}</div><div class="meta">${esc(sub)}</div>${dueChip(state.accounts[a.id] || a)}</div>
           <div style="text-align:right">
             <div>${a.balance_current != null ? fmt(a.balance_current, a.currency) : "—"}</div>
             <div class="meta">${a.limit ? "额度 " + fmt(a.limit, a.currency) : ""}</div>
@@ -702,7 +723,7 @@ function renderSettings() {
       <span class="map-controls">
         <select data-map="${esc(a.id)}"><option value="">不计积分</option>${options(productOf(a))}</select>
         <span class="closing-input" title="Statement closing date：每月几号出账单">账单日
-          <input type="number" min="1" max="31" inputmode="numeric" data-closing="${esc(a.id)}" value="${esc(state.rewards.closing?.[a.id] ?? "")}" placeholder="末"> 号</span>
+          <input type="number" min="1" max="31" inputmode="numeric" data-closing="${esc(a.id)}" value="${esc(state.rewards.closing?.[a.id] ?? "")}" placeholder="${closingDay(a.id).source === "auto" ? closingDay(a.id).day : "末"}" title="${closingDay(a.id).source === "auto" ? `留空 = 自动（来自上期出账日 ${closingDay(a.id).from}）` : "留空 = 月底"}"> 号</span>
       </span>
     </label>`).join("") : `<p class="hint">还没有信用卡账户</p>`;
 
@@ -854,6 +875,16 @@ function bindRewards() {
   });
 }
 
+// 账户行上的还款提醒小标签
+function dueChip(a) {
+  const d = dueInfo(a);
+  if (!d) return "";
+  const md = `${+d.next_payment_due_date.slice(5, 7)}/${+d.next_payment_due_date.slice(8)}`;
+  const txt = d.level === "overdue" ? "已逾期" : d.nothing ? `本期无需还款` : d.paid ? `本期已还 · 下次 ${md}` :
+    d.days < 0 ? `还款日 ${md} 已过` : `${md} 还款 · 剩 ${d.days} 天${d.minimum_payment_amount != null ? ` · 最低 ${fmt(d.minimum_payment_amount)}` : ""}`;
+  return `<span class="due-chip ${d.level}">${esc(txt)}</span>`;
+}
+
 // 额度进度：已用 / 额度，30% 以内绿色、30–70% 琥珀、70% 以上红色（信用分常看 30% 这条线）
 function limitBar(a) {
   const used = Math.max(0, a.balance_current || 0), lim = a.limit;
@@ -957,6 +988,7 @@ function bind() {
     if (!t) return;
     if (t.dataset.del && confirm("删除这个任务？")) saveBenefits(state.benefits.filter((b) => b.id !== t.dataset.del));
     if (t.dataset.relink) connect(t.dataset.relink);
+    if (t.dataset.liab) connect(t.dataset.liab, { liabilities: true });
     if (t.dataset.remove) removeItem(t.dataset.remove, t.dataset.name);
   });
 }

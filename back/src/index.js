@@ -46,9 +46,12 @@ const ROUTES = {
     };
     if (env.PLAID_REDIRECT_URI) req.redirect_uri = env.PLAID_REDIRECT_URI;
     if (body.item_id) {
+      // 更新模式：重新登录；add_liabilities 时顺便请求 Liabilities 授权（不占新连接名额）
       req.access_token = (await getItem(env, body.item_id)).access_token;
+      if (body.add_liabilities) req.additional_consented_products = ["liabilities"];
     } else {
       req.products = ["transactions"];
+      req.optional_products = ["liabilities"]; // 银行支持就一起授权，不支持也不影响连接
       req.transactions = { days_requested: 730 };
     }
     const data = await plaid(env, "/link/token/create", req);
@@ -101,6 +104,7 @@ const ROUTES = {
       env.DB.delete(`item:${id}`),
       env.DB.delete(`txns:${id}`),
       env.DB.delete(`accounts:${id}`),
+      env.DB.delete(`liab:${id}`),
     ]);
     const ids = (await getJSON(env, "items", [])).filter((x) => x !== id);
     await putJSON(env, "items", ids);
@@ -250,14 +254,47 @@ async function syncItem(env, itemId, { full = false } = {}) {
   try { accounts = (await plaid(env, "/accounts/get", { access_token: item.access_token })).accounts; }
   catch { accounts = result.accounts || []; }
 
+  // 信用卡负债：账单金额 / 出账日 / 最低还款 / 还款日 / APR。拿不到不影响交易同步
+  const liab = await pullLiabilities(env, item);
+
   item.cursor = result.cursor;
   item.last_synced = new Date().toISOString();
   item.error = null;
   await Promise.all([
+    liab ? putJSON(env, `liab:${itemId}`, liab) : null,
     putJSON(env, `txns:${itemId}`, store),
     putJSON(env, `accounts:${itemId}`, accounts.map(slimAccount)),
     putJSON(env, `item:${itemId}`, item),
   ]);
+}
+
+async function pullLiabilities(env, item) {
+  try {
+    const d = await plaid(env, "/liabilities/get", { access_token: item.access_token });
+    item.liab_status = "ok";
+    const out = {};
+    for (const c of d.liabilities?.credit || []) {
+      out[c.account_id] = {
+        last_statement_balance: c.last_statement_balance ?? null,
+        last_statement_issue_date: c.last_statement_issue_date || null,
+        minimum_payment_amount: c.minimum_payment_amount ?? null,
+        next_payment_due_date: c.next_payment_due_date || null,
+        last_payment_amount: c.last_payment_amount ?? null,
+        last_payment_date: c.last_payment_date || null,
+        is_overdue: c.is_overdue ?? null,
+        aprs: (c.aprs || []).map((a) => ({
+          type: a.apr_type, pct: a.apr_percentage, balance: a.balance_subject_to_apr ?? null, interest: a.interest_charge_amount ?? null,
+        })),
+      };
+    }
+    return out;
+  } catch (e) {
+    const code = e.plaid?.code || "";
+    // 需要用户在更新模式里补授权 / 银行不支持 / 其他错误
+    item.liab_status = /CONSENT|NOT_AUTHORIZED|INVALID_PRODUCT/.test(code) ? "consent_required"
+      : /NOT_SUPPORTED|NO_LIABILITY_ACCOUNTS|PRODUCTS_NOT_SUPPORTED/.test(code) ? "unsupported" : `error:${code || e.message}`;
+    return null;
+  }
 }
 
 async function pullAll(env, item) {
@@ -282,17 +319,20 @@ async function loadAll(env) {
   const items = [];
   let transactions = [];
   for (const id of ids) {
-    const [item, accounts, txns] = await Promise.all([
+    const [item, accounts, txns, liab] = await Promise.all([
       getJSON(env, `item:${id}`, null),
       getJSON(env, `accounts:${id}`, []),
       getJSON(env, `txns:${id}`, {}),
+      getJSON(env, `liab:${id}`, {}),
     ]);
+    for (const a of accounts) if (liab[a.id]) a.liability = liab[a.id];
     if (!item) continue;
     items.push({
       item_id: id,
       institution: item.institution,
       last_synced: item.last_synced,
       error: item.error,
+      liab_status: item.liab_status || null,
       accounts,
     });
     transactions = transactions.concat(Object.values(txns));
