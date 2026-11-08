@@ -64,7 +64,7 @@
   function spendTxns() {
     const credit = new Set(creditAccounts().map((a) => a.id));
     return state.txns.filter((t) =>
-      credit.has(t.account_id) && !NO_SPEND.has(t.category) && !R.isBenefitCredit(t) &&
+      credit.has(t.account_id) && !NO_SPEND.has(t.category) && !R.isBenefitCredit(t) && !R.isAnnualFee(t) &&
       (!ui.card || t.account_id === ui.card));
   }
 

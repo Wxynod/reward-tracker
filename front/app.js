@@ -466,7 +466,7 @@ function renderCatBar() {
   for (const t of filteredTxns({ ignoreCat: true })) {
     if (t.amount <= 0) continue;
     const ic = I.info(t);
-    if (["payment", "fee", "income", "benefit"].includes(ic.key)) continue;
+    if (["payment", "fee", "income", "benefit", "annual_fee"].includes(ic.key)) continue;
     const s = sums.get(ic.key) || { ...ic, total: 0 };
     s.total += t.amount; sums.set(ic.key, s);
   }

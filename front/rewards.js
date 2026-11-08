@@ -59,6 +59,9 @@
 
   // 卡片权益返现（Dining Credit、Uber Cash、Amex Offers 等）：是发卡行给的抵扣，不扣积分
   const BENEFIT_CREDIT = /\b(dining|hotel|resort|property|airline|uber|digital entertainment|entertainment|saks|walmart\+?|clear|equinox|lululemon|oura|resy|streaming|travel|statement|platinum|brilliant|gold|offer)\b.*\bcredit\b|\bamex offer\b|\bcredit\b.*\b(amex|american express)\b/i;
+  // 年费（Annual / Membership Fee）：不产生积分；退回的年费（负数）也不扣积分
+  const ANNUAL_FEE = /annual\s*(membership\s*)?fee|membership\s*fee|card\s*member\s*fee|annual\s*card\s*fee/i;
+  const isAnnualFee = (t) => ANNUAL_FEE.test(`${t.name || ""} ${t.merchant || ""} ${t.detail?.original_description || ""}`);
   const isBenefitCredit = (t) => t.amount < 0 && BENEFIT_CREDIT.test(`${t.name || ""} ${t.merchant || ""}`);
 
   // 不产生积分的交易（还款、转账、利息、费用）
@@ -290,6 +293,7 @@
       for (const t of list) {
         const key = ruleKey(t);
         const base = { cat: null, unit, program: product.program, product: pKey, key };
+        if (isAnnualFee(t)) { out.set(t.id, { ...base, rate: 0, earned: 0, cat: "none", source: t.amount > 0 ? "年费，不计积分" : "年费退回，不扣积分" }); continue; }
         if (isBenefitCredit(t)) { out.set(t.id, { ...base, rate: 0, earned: 0, cat: "none", source: "权益返现，不扣积分" }); continue; }
         if (NO_EARN_PRIMARY.has(t.category)) { out.set(t.id, { ...base, rate: 0, earned: 0, cat: "none", source: "不计积分" }); continue; }
 
@@ -355,5 +359,5 @@
       ? (v < 0 ? "−$" : "$") + Math.abs(v).toFixed(2)
       : (v < 0 ? "−" : "") + Math.round(Math.abs(v)).toLocaleString("en-US");
 
-  window.RT_REWARDS = { isBenefitCredit, PROGRAMS, PRODUCTS, CATS, guessProduct, issuerOf, compute, ruleKey, ruleKeyLabel, catLabel, fmtRate, fmtEarned };
+  window.RT_REWARDS = { isBenefitCredit, isAnnualFee, PROGRAMS, PRODUCTS, CATS, guessProduct, issuerOf, compute, ruleKey, ruleKeyLabel, catLabel, fmtRate, fmtEarned };
 })();

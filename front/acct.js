@@ -124,6 +124,12 @@
           <select data-map="${esc(a.id)}"><option value="">不计积分</option>${productOptions(pk)}</select>
           <small>${prog ? `${esc(prog.name)} · 基础 ${esc(R.fmtRate(product.base, prog.unit))}` : "选择卡型后按对应倍数估算积分"}</small>
         </label>
+        ${(() => {
+          const f = window.RT_CAL?.feeInfo(a);
+          return `<div class="ad-fee">${f
+            ? `<span class="lg fee">年</span><span>年费 <b>${fmt(f.amount)}</b> · 上次 ${md(f.last.date)} 扣费 · 下次约 <b>${ymd(f.next)}</b>（还有 ${Math.round((new Date(f.next) - new Date(t0)) / 864e5)} 天）</span>`
+            : `<span class="lg fee off">年</span><span>交易记录里没找到年费（可能没有年费，或扣费早于 Plaid 能拿到的 24 个月）</span>`}</div>`;
+        })()}
         ${product?.rules?.length ? `<ul class="ad-rules">${product.rules.filter((r) => !r.to || r.to >= t0).map((r) => `<li><b>${esc(R.fmtRate(r.rates ? Math.max(r.rate, ...Object.values(r.rates)) : r.rate, prog.unit))}</b>${esc(r.cats.map((c) => R.CATS[c] || c).slice(0, 4).join("、"))}${r.cap ? ` <small>上限 $${r.cap.toLocaleString()}</small>` : ""}${r.note ? ` <small>${esc(r.note)}</small>` : ""}</li>`).join("")}</ul>` : ""}
       </section>` : "";
 

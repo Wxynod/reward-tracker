@@ -1285,3 +1285,16 @@ html, body { overflow-x: clip; }
   .ag-empty { padding: 10px 0; }
 }
 #acct-detail.over { z-index: 95; }
+
+/* ---------- annual fee on calendar ---------- */
+.ev.fee i { background: #b88a1e; }
+.ev.fee.est i { background: #fff; color: #b88a1e; border: 1.5px dashed #b88a1e; }
+.lg.fee { background: #b88a1e; }
+.lg.fee.off { background: #cfc6b6; }
+.dot.fee { background: #b88a1e; }
+.cal-day.has-fee:not(.has-due) { background: linear-gradient(180deg, color-mix(in srgb, #b88a1e 8%, var(--card)), var(--card) 60%); }
+.ag-item.fee { border-left-color: #b88a1e; }
+.ag-item.fee.hl { border-color: #b88a1e; }
+.ag-kind.fee { color: #9a7215; }
+.ad-fee { display: flex; align-items: flex-start; gap: 8px; margin-top: 12px; padding: 10px 12px; border-radius: 10px; background: color-mix(in srgb, #b88a1e 7%, var(--paper)); font-size: 13px; line-height: 1.6; }
+.ad-fee .lg { flex: none; margin-top: 2px; }

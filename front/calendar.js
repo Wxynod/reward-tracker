@@ -17,6 +17,24 @@
 
   const ui = { ym: todayLocal().slice(0, 7), sel: null };
 
+  const KIND = { close: ["账", "出账日"], due: ["还", "还款日"], fee: ["年", "年费日"] };
+
+  // ------------------------------------------------------------ 年费：在交易记录里找「Annual Fee / Membership Fee」
+  const FEE_EXCLUDE = /revers|refund|credit|waive|adjust/i;
+  function feeInfo(a) {
+    const hits = state.txns.filter((t) => t.account_id === a.id && t.amount > 0 && R.isAnnualFee(t) &&
+      !FEE_EXCLUDE.test(`${t.name || ""} ${t.detail?.original_description || ""}`))
+      .sort((x, y) => (x.date < y.date ? 1 : -1));
+    if (!hits.length) return null;
+    const last = hits[0];
+    // 下次年费：上次扣费日 + 1 年（不足就继续 +1 年，直到落在今天之后）
+    let next = last.date;
+    const t0 = todayLocal();
+    do { next = `${+next.slice(0, 4) + 1}${next.slice(4)}`; } while (next < t0);
+    if (next.slice(5) === "02-29") next = `${next.slice(0, 4)}-02-28`;
+    return { last, amount: last.amount, next, history: hits };
+  }
+
   // ------------------------------------------------------------ 事件
   // { date, kind: "close" | "due", a, est, info }
   function events(from, to) {
@@ -38,6 +56,12 @@
           if (d >= from && d <= to) out.push({ date: d, kind: "due", a, est: true, info: null });
         }
         if (++m > 12) { m = 1; y++; }
+      }
+      // 年费：历史扣费记录（真实）+ 下一次（按上次日期推算）
+      const fee = feeInfo(a);
+      if (fee) {
+        for (const h of fee.history) if (h.date >= from && h.date <= to) out.push({ date: h.date, kind: "fee", a, est: false, info: { amount: h.amount, fee } });
+        if (fee.next >= from && fee.next <= to) out.push({ date: fee.next, kind: "fee", a, est: true, info: { amount: fee.amount, fee } });
       }
       // 当期真实还款日（来自 Liabilities）
       if (L?.next_payment_due_date && L.next_payment_due_date >= from && L.next_payment_due_date <= to) {
@@ -82,11 +106,11 @@
       const d = addDays(start, i);
       const list = byDay.get(d) || [];
       const out = d.slice(0, 7) !== ui.ym, isToday = d === t0, past = d < t0;
-      const hasDue = list.some((e) => e.kind === "due"), hasClose = list.some((e) => e.kind === "close");
+      const hasDue = list.some((e) => e.kind === "due"), hasClose = list.some((e) => e.kind === "close"), hasFee = list.some((e) => e.kind === "fee");
       const urgent = list.some((e) => e.kind === "due" && !e.est && e.info && ["urgent", "overdue"].includes(e.info.level));
-      html += `<button class="cal-day${out ? " out" : ""}${isToday ? " today" : ""}${past ? " past" : ""}${ui.sel === d ? " sel" : ""}${hasDue ? " has-due" : ""}${hasClose ? " has-close" : ""}${urgent ? " urgent" : ""}" data-day="${d}" aria-label="${+d.slice(5, 7)}月${+d.slice(8)}日${list.length ? `，${list.length} 个事项` : ""}">
+      html += `<button class="cal-day${out ? " out" : ""}${isToday ? " today" : ""}${past ? " past" : ""}${ui.sel === d ? " sel" : ""}${hasDue ? " has-due" : ""}${hasClose ? " has-close" : ""}${hasFee ? " has-fee" : ""}${urgent ? " urgent" : ""}" data-day="${d}" aria-label="${+d.slice(5, 7)}月${+d.slice(8)}日${list.length ? `，${list.length} 个事项` : ""}">
         <span class="num">${+d.slice(8)}</span>
-        ${list.length ? `<span class="evs">${list.slice(0, narrow() ? 2 : 3).map((e) => `<span class="ev ${e.kind}${e.est ? " est" : ""}" data-ev="${esc(evKey(e))}" title="${esc(cardName(e.a))} · ${e.kind === "close" ? "出账日" : "还款日"}${e.est ? "（预计）" : ""}">${RT_CARDS.face(e.a, "xs")}<i>${e.kind === "close" ? "账" : "还"}</i></span>`).join("")}${list.length > (narrow() ? 2 : 3) ? `<span class="more">+${list.length - (narrow() ? 2 : 3)}</span>` : ""}</span>` : ""}
+        ${list.length ? `<span class="evs">${list.slice(0, narrow() ? 2 : 3).map((e) => `<span class="ev ${e.kind}${e.est ? " est" : ""}" data-ev="${esc(evKey(e))}" title="${esc(cardName(e.a))} · ${KIND[e.kind][1]}${e.est ? "（预计）" : ""}">${RT_CARDS.face(e.a, "xs")}<i>${KIND[e.kind][0]}</i></span>`).join("")}${list.length > (narrow() ? 2 : 3) ? `<span class="more">+${list.length - (narrow() ? 2 : 3)}</span>` : ""}</span>` : ""}
       </button>`;
     }
     return { html, evs: evs.filter((e) => e.date.startsWith(ui.ym)) };
@@ -97,7 +121,11 @@
     const left = diff(t0, e.date);
     const when = left === 0 ? "今天" : left === 1 ? "明天" : left > 0 ? `${left} 天后` : `${-left} 天前`;
     let body = "";
-    if (e.kind === "close") {
+    if (e.kind === "fee") {
+      const f = e.info.fee;
+      body = `<div class="ag-nums"><span><small>${e.est ? "预计年费" : "已扣年费"}</small><b>${fmt(e.info.amount)}</b></span>${e.est ? `<span><small>上次扣费</small><b>${md(f.last.date)}</b></span>` : ""}</div>
+        <p class="ag-note">${e.est ? (left >= 0 && left <= 45 ? "快到年费日了：可以评估权益是否值、问问保留优惠或降级" : "按上次扣费日推算，以账单为准") : esc(f.last.name)}</p>`;
+    } else if (e.kind === "close") {
       const isNext = e.date > lastClosing(a.id, t0) && e.date >= t0 && e.date === nextCloseOf(a);
       if (isNext) {
         const s = cycleStats(a);
@@ -119,7 +147,7 @@
     return `<div class="ag-item ${e.kind}${e.est ? " est" : ""}" data-ev="${esc(evKey(e))}" data-date="${e.date}" tabindex="0">
       <span class="ag-face">${RT_CARDS.face(a, "sm")}</span>
       <span class="ag-main">
-        <span class="ag-top"><span class="ag-kind ${e.kind}">${e.kind === "close" ? "出账日" : "还款日"}${e.est ? " · 预计" : ""}</span><span class="ag-when">${md(e.date)} · ${when}</span></span>
+        <span class="ag-top"><span class="ag-kind ${e.kind}">${KIND[e.kind][1]}${e.est ? " · 预计" : ""}</span><span class="ag-when">${md(e.date)} · ${when}</span></span>
         <b class="ag-name">${esc(cardName(a))}${a.mask ? ` <small>··${esc(a.mask)}</small>` : ""}</b>
         ${body}
         <button class="ag-open" data-open-acct="${esc(a.id)}">账户详情 ›</button>
@@ -153,8 +181,10 @@
     const t0 = todayLocal();
     const up = events(t0, addDays(t0, 60));
     const nc = up.find((e) => e.kind === "close"), nd = up.find((e) => e.kind === "due" && !(e.info?.paid || e.info?.nothing));
+    const nf = events(t0, addDays(t0, 120)).find((e) => e.kind === "fee");
     return `<div class="cal-sum">
       ${nc ? `<span><i class="dot close"></i>下个出账 <b>${esc(cardName(nc.a))}</b> ${md(nc.date)}</span>` : ""}
+      ${nf ? `<span><i class="dot fee"></i>下个年费 <b>${esc(cardName(nf.a))}</b> ${md(nf.date)} · ${fmt(nf.info.amount)}</span>` : ""}
       ${nd ? `<span><i class="dot due"></i>下个还款 <b>${esc(cardName(nd.a))}</b> ${md(nd.date)}${nd.info?.minimum_payment_amount != null ? ` · 最低 ${fmt(nd.info.minimum_payment_amount)}` : ""}</span>` : ""}
     </div>`;
   }
@@ -285,6 +315,7 @@
           <div class="cal-legend">
             <span><i class="lg close">账</i>出账日</span>
             <span><i class="lg due">还</i>还款日</span>
+            <span><i class="lg fee">年</i>年费日</span>
             <span><i class="lg est">还</i>预计（按间隔推算）</span>
             <span><i class="lg today"></i>今天</span>
           </div>
@@ -320,5 +351,5 @@
     if (e.key === "ArrowRight") el.querySelector('[data-cal-nav="1"]')?.click();
   }, true);
 
-  window.RT_CAL = { open, close, refresh: paint, summary, events };
+  window.RT_CAL = { open, close, refresh: paint, summary, events, feeInfo };
 })();
