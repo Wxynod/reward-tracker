@@ -83,7 +83,9 @@
     }
     registry.set(id, { ...registry.get(id), opts, minDate });
 
-    const W = 760, H = 250, L = 56, Rm = 10, T = 16, B = 28, pw = W - L - Rm, ph = H - T - B;
+    // 手机上用窄画布，文字和柱子才不会被缩得太小
+    const narrow = innerWidth < 560;
+    const W = narrow ? 400 : 760, H = narrow ? 240 : 250, L = narrow ? 44 : 56, Rm = 8, T = 16, B = 28, pw = W - L - Rm, ph = H - T - B;
     const max = niceMax(Math.max(...data.map((d) => d.total), 1));
     const y = (v) => T + ph - (Math.max(0, v) / max) * ph;
     const step = pw / data.length, bw = Math.max(3, Math.min(lv === "day" ? 16 : 64, step * 0.62));
@@ -91,7 +93,7 @@
       const v = max * f, yy = y(v);
       return `<line x1="${L}" x2="${W - Rm}" y1="${yy}" y2="${yy}" class="grid${f === 0 ? " base" : ""}"/><text x="${L - 8}" y="${yy + 4}" class="tick" text-anchor="end">${short(v)}</text>`;
     }).join("");
-    const every = lv === "day" ? Math.ceil(data.length / 10) : 1;
+    const every = lv === "day" ? Math.ceil(data.length / (narrow ? 6 : 10)) : 1;
     const canDrill = lv !== "day";
     const cols = data.map((d, i) => {
       const x = L + step * i + (step - bw) / 2, future = (lv === "day" ? d.k : range({ lv, k: d.k })[0]) > t0;
@@ -102,7 +104,7 @@
         const y1 = y(acc + v), y0 = y(acc); acc += v;
         return `<rect x="${x.toFixed(1)}" y="${y1.toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(0.5, y0 - y1).toFixed(1)}" fill="${s.color}" class="seg-rect"/>`;
       }).join("");
-      const big = lv !== "day" && d.total > 0 ? `<text x="${(x + bw / 2).toFixed(1)}" y="${(y(d.total) - 6).toFixed(1)}" class="val" text-anchor="middle">${escH(short(d.total))}</text>` : "";
+      const big = lv !== "day" && d.total > 0 && !(narrow && data.length > 6) ? `<text x="${(x + bw / 2).toFixed(1)}" y="${(y(d.total) - 6).toFixed(1)}" class="val" text-anchor="middle">${escH(short(d.total))}</text>` : "";
       const xl = (i % every === 0) ? `<text x="${(L + step * i + step / 2).toFixed(1)}" y="${H - 8}" class="tick${future ? " future" : ""}" text-anchor="middle">${escH(childLabel(lv, d.k))}</text>` : "";
       const tip = `${childLabel(lv, d.k, true)}${canDrill ? "（双击进入）" : ""}|合计 ${fmt(d.total)}|` +
         (series.length > 1 ? series.filter((s) => d.by[s.id]).sort((a, b) => d.by[b.id] - d.by[a.id]).map((s) => `${s.color}~${s.label}~${fmt(d.by[s.id])}`).join("|") : "");

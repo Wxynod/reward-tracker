@@ -427,8 +427,8 @@ function renderAccounts() {
   $("#account-list").innerHTML = state.items.map((it) => `
     <div class="card">
       <div class="inst-head">
-        <h3 class="with-logo">${instLogo(it.institution)}${esc(it.institution)}</h3>
-        <div>
+        <h3 class="with-logo">${instLogo(it.institution)}<span class="inst-name">${esc(it.institution)}</span></h3>
+        <div class="inst-actions">
           ${it.error ? `<button class="btn small primary" data-relink="${esc(it.item_id)}">重新连接</button>` : ""}
           ${!it.error && it.liab_status === "consent_required" ? `<button class="btn small" data-liab="${esc(it.item_id)}" title="授权后可自动获取账单日、还款日、最低还款和 APR">授权账单信息</button>` : ""}
           <button class="btn small ghost" data-remove="${esc(it.item_id)}" data-name="${esc(it.institution)}">断开</button>
@@ -441,8 +441,8 @@ function renderAccounts() {
         return `
         <div class="acct${a.type === "credit" || a.type === "depository" ? " has-face" : ""}" data-acct="${esc(a.id)}" tabindex="0" role="button" aria-label="查看 ${esc(name)} 的账户详情">
           ${a.type === "credit" || a.type === "depository" ? `<span class="acct-face">${RT_CARDS.face(state.accounts[a.id] || a, "sm")}</span>` : ""}
-          <div><div>${esc(name)}${a.mask ? " ··" + esc(a.mask) : ""}</div><div class="meta">${esc(sub)}</div>${dueChip(state.accounts[a.id] || a)}</div>
-          <div style="text-align:right">
+          <div class="acct-info"><div class="acct-name">${esc(name)}${a.mask ? ` <span class="mask">··${esc(a.mask)}</span>` : ""}</div><div class="meta">${esc(sub)}</div>${dueChip(state.accounts[a.id] || a)}</div>
+          <div class="acct-amt">
             <div>${a.balance_current != null ? fmt(a.balance_current, a.currency) : "—"}</div>
             <div class="meta">${a.limit ? "额度 " + fmt(a.limit, a.currency) : ""}</div>
           </div>
@@ -687,8 +687,8 @@ function renderPointsPeriods(keys) {
     <thead><tr><th></th>${starts.map(([l, s]) => `<th>${l}<small>${l === "今日" ? `${+s.slice(5, 7)}/${+s.slice(8)}` : `${+s.slice(5, 7)}/${+s.slice(8)} 起`}</small></th>`).join("")}</tr></thead>
     <tbody>${keys.map((k) => {
       const p = R.PROGRAMS[k];
-      return `<tr><th>${programLogo(k, "plogo xs")}<span>${esc(p.name)}</span></th>${sums[k].map((v) =>
-        `<td class="${v ? "" : "zero"}">${v ? (v > 0 ? "+" : "") + esc(R.fmtEarned(v, p.unit)) : "—"}</td>`).join("")}</tr>`;
+      return `<tr><th>${programLogo(k, "plogo xs")}<span>${esc(p.name)}</span></th>${sums[k].map((v, i) =>
+        `<td class="${v ? "" : "zero"}" data-label="${starts[i][0]}">${v ? (v > 0 ? "+" : "") + esc(R.fmtEarned(v, p.unit)) : "—"}</td>`).join("")}</tr>`;
     }).join("")}</tbody>
   </table><p class="hint">按交易日期统计的估算积分（含 Pending），以银行账单为准</p></div>`;
 }
@@ -994,6 +994,9 @@ function bind() {
 }
 
 bind();
+// 窗口宽度跨过手机断点时重画图表（图表按宽度选择不同的画布比例）
+let wasNarrow = innerWidth < 560;
+addEventListener("resize", () => { const n = innerWidth < 560; if (n !== wasNarrow) { wasNarrow = n; render(); } });
 $("#f-month").value = new Date().toISOString().slice(0, 7);
 $("#r-month").value = $("#f-month").value;
 render();
