@@ -203,6 +203,7 @@ function render() {
   window.RT_ANALYTICS?.render();
   window.RT_CARDS?.enhanceAll();
   window.RT_ACCT?.refresh();
+  window.RT_CAL?.refresh();
 }
 
 function renderAccountSelects() {
@@ -423,6 +424,12 @@ async function saveBenefits(next) {
 // ---------------------------------------------------------------- accounts
 
 function renderAccounts() {
+  const tb = $(".acct-toolbar");
+  tb.hidden = !creditAccounts().length;
+  if (window.RT_CAL && creditAccounts().length) {
+    $("#acct-sum").innerHTML = RT_CAL.summary();
+    const ico = $(".cal-ico b"); if (ico) ico.textContent = new Date().getDate();
+  }
   if (!state.items.length) { $("#account-list").innerHTML = `<div class="empty">还没有连接银行</div>`; return; }
   $("#account-list").innerHTML = state.items.map((it) => `
     <div class="card">
@@ -842,6 +849,7 @@ function bindRewards() {
   $("#btn-edit-save").addEventListener("click", saveEdit);
   $("#btn-edit-cancel").addEventListener("click", () => setEditing(false));
   $("#btn-resync").addEventListener("click", resync);
+  $("#btn-cal").addEventListener("click", () => window.RT_CAL?.open());
   $("#btn-refresh").addEventListener("click", refreshFromBank);
 
   document.addEventListener("input", (e) => {
