@@ -811,11 +811,11 @@ html.d-lock, html.d-lock body { overflow: hidden; }
   grid-row: 1 / span 2; position: relative; border: none; padding: 0; background: none; cursor: pointer;
   border-radius: 7px; align-self: start; margin-top: 2px;
 }
-.acct-face span:last-child {
+.acct-face > .face-hint {
   position: absolute; inset: 0; display: grid; place-items: center; border-radius: 6px;
   background: rgba(20, 16, 12, .55); color: #fff; font-size: 11px; opacity: 0; transition: opacity .15s;
 }
-.acct-face:hover span:last-child, .acct-face:focus-visible span:last-child { opacity: 1; }
+.acct-face:hover > .face-hint { opacity: 1; }
 .acct-face .cc { transition: transform .2s; }
 .acct-face:hover .cc { transform: translateY(-2px) rotate(-1.5deg); }
 .row-face { border: none; background: none; padding: 0; cursor: pointer; display: inline-flex; }
