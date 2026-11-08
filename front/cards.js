@@ -56,14 +56,15 @@
     apple_card: [["apple_card", "Apple Card"]],
     samsung_galaxy: [["samsung_galaxy_card_rounded", "Samsung Galaxy · 圆角"], ["samsung_galaxy_card", "Samsung Galaxy Card"]],
     "debit:Chase": [["chase_debit_1", "Star Wars · 黑武士"], ["chase_debit_2", "Star Wars · BB-8"], ["chase_debit_3", "Disney · 城堡"]],
-    "debit:Schwab": [["schwab_bank_debit", "Schwab 借记卡"]],
+    "debit:Schwab": [["schwab_bank_debit", "Schwab Bank 借记卡"], ["schwab_one_brokerage", "Schwab One Brokerage 借记卡"]],
+    "brokerage:Schwab": [["schwab_one_brokerage", "Schwab One Brokerage 借记卡"], ["schwab_bank_debit", "Schwab Bank 借记卡"]],
   };
   let lib = {};          // 图库：名字 → dataURL
   const artKey = (a) => {
     if (a.type === "credit") return productKey(a);
     const inst = String(a.institution || "").toLowerCase();
+    if (inst.includes("schwab")) return a.type === "investment" || a.type === "brokerage" ? "brokerage:Schwab" : "debit:Schwab";
     if (inst.includes("chase")) return "debit:Chase";
-    if (inst.includes("schwab")) return "debit:Schwab";
     return null;
   };
   const artFor = (a) => (ART[artKey(a)] || []).filter(([n]) => lib[n]);

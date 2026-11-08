@@ -439,8 +439,8 @@ function renderAccounts() {
         const name = cardName(a);
         const sub = name !== a.name ? a.name : (a.official_name || a.subtype || "");
         return `
-        <div class="acct${a.type === "credit" || a.type === "depository" ? " has-face" : ""}" data-acct="${esc(a.id)}" tabindex="0" role="button" aria-label="查看 ${esc(name)} 的账户详情">
-          ${a.type === "credit" || a.type === "depository" ? `<span class="acct-face">${RT_CARDS.face(state.accounts[a.id] || a, "sm")}</span>` : ""}
+        <div class="acct${["credit", "depository", "investment"].includes(a.type) ? " has-face" : ""}" data-acct="${esc(a.id)}" tabindex="0" role="button" aria-label="查看 ${esc(name)} 的账户详情">
+          ${["credit", "depository", "investment"].includes(a.type) ? `<span class="acct-face">${RT_CARDS.face(state.accounts[a.id] || a, "sm")}</span>` : ""}
           <div class="acct-info"><div class="acct-name">${esc(name)}${a.mask ? ` <span class="mask">··${esc(a.mask)}</span>` : ""}</div><div class="meta">${esc(sub)}</div>${dueChip(state.accounts[a.id] || a)}</div>
           <div class="acct-amt">
             <div>${a.balance_current != null ? fmt(a.balance_current, a.currency) : "—"}</div>
