@@ -29,6 +29,8 @@
     "卡片对应 · 账单日": "Card mapping · closing day",
     "卡型决定用哪套倍数（已按账户名自动识别）。账单日（Statement closing date）决定什么时候把 Pending 积分加进 Balance，不填按月底算。":
       "The card product decides which multipliers apply (auto-detected from the account name). The statement closing day decides when Pending points move into the Balance; empty means month-end.",
+    "卡片对应": "Card mapping",
+    "卡型决定用哪套倍数（已按账户名自动识别）。账单日在「账户」里点开对应的卡修改。": "The card product decides which multipliers apply (auto-detected from the account name). To change a statement closing day, open the card under Accounts.",
     "已记住的倍数": "Remembered multipliers",
     "还没有。编辑模式下改过的倍数会出现在这里。": "None yet. Multipliers you change in edit mode show up here.",
     "数据": "Data",

@@ -729,8 +729,6 @@ function renderSettings() {
       <span class="map-title"><button type="button" class="row-face" data-face-acct="${esc(a.id)}" title="更换卡面">${RT_CARDS.face(a, "xs")}</button>${esc(a.institution)} · ${esc(cardNameMask(a))}${cardName(a) !== a.name ? `（${esc(a.name)}）` : ""}</span>
       <span class="map-controls">
         <select data-map="${esc(a.id)}"><option value="">不计积分</option>${options(productOf(a))}</select>
-        <span class="closing-input" title="Statement closing date：每月几号出账单">账单日
-          <input type="number" min="1" max="31" inputmode="numeric" data-closing="${esc(a.id)}" value="${esc(state.rewards.closing?.[a.id] ?? "")}" placeholder="${closingDay(a.id).source === "auto" ? closingDay(a.id).day : "末"}" title="${closingDay(a.id).source === "auto" ? `留空 = 自动（来自上期出账日 ${closingDay(a.id).from}）` : "留空 = 月底"}"> 号</span>
       </span>
     </label>`).join("") : `<p class="hint">还没有信用卡账户</p>`;
 

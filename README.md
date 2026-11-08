@@ -223,7 +223,7 @@ Every route except `/api/login` requires `Authorization: Bearer <session token>`
 | `acct.js` | Account detail sheet |
 | `calendar.js` | Billing calendar |
 
-All script and style tags carry a `?v=YYYYMMDDx` query for cache busting (currently `20261109a`). Bump it on every frontend change.
+All script and style tags carry a `?v=YYYYMMDDx` query for cache busting (currently `20261109b`). Bump it on every frontend change.
 
 ---
 
