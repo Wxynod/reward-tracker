@@ -14,7 +14,7 @@ window.brandFail = (img) => {
   img.nextElementSibling?.remove();
   img.remove();
 };
-const EMPTY_REWARDS = () => ({ cards: {}, rules: {}, balances: {}, closing: {} });
+const EMPTY_REWARDS = () => ({ cards: {}, rules: {}, balances: {}, closing: {}, cardface: {} });
 
 // ---------------------------------------------------------------- 账单周期
 // 账单日 day（1–31）在某个月的实际日期：小月取月底
@@ -82,6 +82,7 @@ function ingest(data) {
 async function load() {
   ingest(await api("/api/data"));
   loadLogos();
+  window.RT_CARDS?.loadImages();
 }
 
 async function loadLogos() {
@@ -144,7 +145,7 @@ function resumeOAuth() {
 }
 
 async function removeItem(itemId, name) {
-  if (!confirm(itemId === "apple" ? "清空所有快捷指令推送的 Apple Card 交易？之后新的推送会重新记录。" : `断开 ${name}？本地存的该银行交易也会删除。`)) return;
+  if (!confirm(`断开 ${name}？本地存的该银行交易也会删除。`)) return;
   try { await api("/api/items/remove", { method: "POST", body: { item_id: itemId } }); await load(); toast("已断开"); }
   catch (e) { toast(e.message); }
 }
@@ -181,6 +182,7 @@ function render() {
   renderBenefits();
   renderAccounts();
   window.RT_ANALYTICS?.render();
+  window.RT_CARDS?.enhanceAll();
 }
 
 function renderAccountSelects() {
@@ -408,7 +410,7 @@ function renderAccounts() {
         <h3 class="with-logo">${instLogo(it.institution)}${esc(it.institution)}</h3>
         <div>
           ${it.error ? `<button class="btn small primary" data-relink="${esc(it.item_id)}">重新连接</button>` : ""}
-          <button class="btn small ghost" data-remove="${esc(it.item_id)}" data-name="${esc(it.institution)}" title="${it.manual ? "删除所有快捷指令推送的 Apple Card 交易" : ""}">${it.manual ? "清空" : "断开"}</button>
+          <button class="btn small ghost" data-remove="${esc(it.item_id)}" data-name="${esc(it.institution)}">断开</button>
         </div>
       </div>
       ${it.error ? `<div class="err">${esc(it.error.code)}：${esc(it.error.message)}</div>` : ""}
@@ -416,7 +418,8 @@ function renderAccounts() {
         const name = cardName(a);
         const sub = name !== a.name ? a.name : (a.official_name || a.subtype || "");
         return `
-        <div class="acct">
+        <div class="acct${a.type === "credit" ? " has-face" : ""}">
+          ${a.type === "credit" ? `<button class="acct-face" data-face-acct="${esc(a.id)}" title="更换卡面" aria-label="更换 ${esc(name)} 的卡面">${RT_CARDS.face(state.accounts[a.id] || a, "sm")}<span>更换卡面</span></button>` : ""}
           <div><div>${esc(name)}${a.mask ? " ··" + esc(a.mask) : ""}</div><div class="meta">${esc(sub)}</div></div>
           <div style="text-align:right">
             <div>${a.balance_current != null ? fmt(a.balance_current, a.currency) : "—"}</div>
@@ -425,9 +428,7 @@ function renderAccounts() {
           ${a.type === "credit" && a.limit ? limitBar(a) : ""}
         </div>`;
       }).join("")}
-      <div class="hint" style="margin-top:8px">${it.manual
-        ? `iOS 快捷指令推送 · 只记录 Apple Pay 交易，没有余额和 MCC · 最近推送：${it.last_synced ? new Date(it.last_synced).toLocaleString("zh-CN") : "—"}`
-        : `上次同步：${it.last_synced ? new Date(it.last_synced).toLocaleString("zh-CN") : "尚未同步"}`}</div>
+      <div class="hint" style="margin-top:8px">上次同步：${it.last_synced ? new Date(it.last_synced).toLocaleString("zh-CN") : "尚未同步"}</div>
     </div>`).join("");
 }
 
@@ -608,7 +609,7 @@ function renderRewards() {
     const chips = Object.entries(c.cats).sort((a, b) => b[1] - a[1]).slice(0, 4)
       .map(([n, v]) => `<span class="chip">${esc(n)} ${esc(R.fmtEarned(v, p.unit))}</span>`).join("");
     return `<div class="earn-row">
-      ${programLogo(c.prog, "plogo sm")}
+      <button class="row-face" data-face-acct="${esc(c.a.id)}" title="更换卡面">${RT_CARDS.face(c.a, "xs")}</button>
       <div class="er-main">
         <div class="er-title">${esc(R.PRODUCTS[c.pk].name)}${/_other$/.test(c.pk) ? '<span class="tag warn-tag">未识别卡型</span>' : ""}<span class="meta"> · ${esc(c.a.institution)}${c.a.mask ? " ··" + esc(c.a.mask) : ""}</span></div>
         <div class="chips">${chips || '<span class="meta">本月暂无消费</span>'}</div>
@@ -697,7 +698,7 @@ function renderSettings() {
   const options = productOptions;
   $("#card-map").innerHTML = accts.length ? accts.map((a) => `
     <label class="map-row">
-      <span>${esc(a.institution)} · ${esc(cardNameMask(a))}${cardName(a) !== a.name ? `（${esc(a.name)}）` : ""}</span>
+      <span class="map-title"><button type="button" class="row-face" data-face-acct="${esc(a.id)}" title="更换卡面">${RT_CARDS.face(a, "xs")}</button>${esc(a.institution)} · ${esc(cardNameMask(a))}${cardName(a) !== a.name ? `（${esc(a.name)}）` : ""}</span>
       <span class="map-controls">
         <select data-map="${esc(a.id)}"><option value="">不计积分</option>${options(productOf(a))}</select>
         <span class="closing-input" title="Statement closing date：每月几号出账单">账单日

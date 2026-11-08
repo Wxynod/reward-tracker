@@ -107,7 +107,7 @@
     <section id="tab-txns" class="tab">
       <div class="summary" id="summary"></div>
       <div class="filters">
-        <select id="f-account"><option value="">全部卡片</option></select>
+        <select id="f-account" data-cardselect><option value="">全部卡片</option></select>
         <input type="month" id="f-month">
         <input type="search" id="f-q" placeholder="搜索商户 / 描述">
       </div>
@@ -121,7 +121,7 @@
         <summary>＋ 新增权益任务</summary>
         <form id="benefit-form" class="form">
           <label>名称<input name="name" required placeholder="例：Amex Gold Uber Cash / 开卡消费 $4,000"></label>
-          <label>卡片<select name="account_id"><option value="">任意卡片</option></select></label>
+          <label>卡片<select name="account_id" data-cardselect><option value="">任意卡片</option></select></label>
           <div class="row">
             <label>类型
               <select name="type">
@@ -164,6 +164,7 @@
   <script src="icons.js"></script>
   <script src="brands.js"></script>
   <script src="rewards.js"></script>
+  <script src="cards.js"></script>
   <script src="drill.js"></script>
   <script src="analytics.js"></script>
   <script src="app.js"></script>

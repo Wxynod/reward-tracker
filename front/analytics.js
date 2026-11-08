@@ -86,7 +86,7 @@
 
     root.innerHTML = `
       <div class="an-filters">
-        <select id="an-card"><option value="">全部卡片</option>${cards.map((c) =>
+        <select id="an-card" data-cardselect><option value="">全部卡片</option>${cards.map((c) =>
           `<option value="${esc(c.id)}" ${c.id === ui.card ? "selected" : ""}>${esc(c.label)}</option>`).join("")}</select>
         <span class="an-scope">当前范围：<b>${esc(D.label(ui.node, true))}</b> · 下面所有图表都按这个范围统计，在「消费趋势」里下钻或「选择时间」切换</span>
       </div>
@@ -114,6 +114,7 @@
       <section class="an-card">${calendar(all, today)}</section>
       <section class="an-card">${biggest(inRange, cards)}</section>`;
     D.bind(root, "an", (n) => { ui.node = n; render(); });
+    window.RT_CARDS?.enhanceAll(root);
   }
 
   // ------------------------------------------------------------ KPI
@@ -399,7 +400,7 @@
     const closing = state.rewards.closing?.[id];
     return `<div class="an-head">
         <h3>单卡分析</h3>
-        <select id="an-single">${cards.map((x) => `<option value="${esc(x.id)}" ${x.id === id ? "selected" : ""}>${esc(x.label)}</option>`).join("")}</select>
+        <select id="an-single" data-cardselect>${cards.map((x) => `<option value="${esc(x.id)}" ${x.id === id ? "selected" : ""}>${esc(x.label)}</option>`).join("")}</select>
       </div>
       <p class="an-sub"><i class="dot" style="background:${c.color}"></i>${esc(product?.name || c.a.name)} · ${esc(c.a.institution)}${prog ? ` · ${esc(prog.name)}` : ""} · 账单日 ${closing ? `每月 ${closing} 号` : "未设置（按月底）"} · 时间范围跟随上方筛选</p>
       <div class="an-kpis small">

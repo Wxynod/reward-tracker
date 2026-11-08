@@ -176,6 +176,8 @@
         { cats: ["gas", "drugstore"], rate: 3 },
         { cats: ["medical"], rate: 2 },
       ] },
+    // Samsung Pay 3%：网站识别不了是否用 Samsung Pay，这张卡只在 Samsung Pay 场景用，所以全部按 3% 算
+    samsung_galaxy: { name: "Samsung Galaxy Card", issuer: "Barclays", program: "barclays", match: /samsung|galaxy/i, base: 3, rules: [] },
     barclays_view: { name: "Barclays View", issuer: "Barclays", program: "barclays", match: /\bview\b/i, base: 1, rules: [
         { cats: ["dining"], rate: 3 },
         { cats: ["grocery", "streaming", "phone_internet"], rate: 2 },

@@ -2,8 +2,6 @@
 // 作用：代理 Plaid API（secret 只存在这里），把 access_token / 交易 / 权益规则存进 KV。
 // 登录：POST /api/login 校验 APP_USERNAME / APP_PASSWORD，返回签名会话令牌；
 // 其余请求都要带 Authorization: Bearer <会话令牌>。
-// Apple Card：Plaid 连不上，改由 iOS 快捷指令在每次 Apple Pay 付款后 POST /api/ingest/apple-card，
-// 用单独的 APPLE_INGEST_TOKEN 验证（不用登录令牌，因为快捷指令里要长期保存）。
 
 const PLAID_HOSTS = {
   sandbox: "https://sandbox.plaid.com",
@@ -14,10 +12,6 @@ const SESSION_DAYS = 14;   // 登录有效期
 const MAX_FAILS = 5;       // 同一 IP 连续失败次数上限
 const LOCK_SECONDS = 900;  // 超限后锁定时长
 
-// Apple Card（快捷指令推送）在数据里伪装成一个 item + 一个信用卡账户，前端和积分计算不用区分来源
-const APPLE_ITEM = "apple";
-const APPLE_ACCOUNT = "apple-card";
-
 export default {
   async fetch(request, env) {
     const cors = corsHeaders(request, env);
@@ -26,7 +20,6 @@ export default {
     const url = new URL(request.url);
     try {
       if (request.method === "POST" && url.pathname === "/api/login") return await login(request, env, cors);
-      if (request.method === "POST" && url.pathname === "/api/ingest/apple-card") return await ingestApple(request, env, cors);
       if (!(await verifySession(request, env))) return json({ error: "请先登录" }, 401, cors);
       const handler = ROUTES[`${request.method} ${url.pathname}`];
       if (!handler) return json({ error: "not found" }, 404, cors);
@@ -102,10 +95,6 @@ const ROUTES = {
 
   "POST /api/items/remove": async (env, body) => {
     const id = body.item_id;
-    if (id === APPLE_ITEM) {
-      await Promise.all([env.DB.delete(`manual:${APPLE_ITEM}`), env.DB.delete(`txns:${APPLE_ITEM}`)]);
-      return { ok: true };
-    }
     const item = await getItem(env, id);
     await plaid(env, "/item/remove", { access_token: item.access_token }).catch(() => {});
     await Promise.all([
@@ -158,6 +147,7 @@ const ROUTES = {
       rules: r.rules && typeof r.rules === "object" ? r.rules : {},
       balances: r.balances && typeof r.balances === "object" ? r.balances : {},
       closing: r.closing && typeof r.closing === "object" ? r.closing : {}, // 每张卡的账单日（1–31）
+      cardface: r.cardface && typeof r.cardface === "object" ? r.cardface : {}, // 每张卡选的卡面样式
     };
     if (JSON.stringify(clean).length > 200_000) throw httpError(413, "rewards too large");
     await putJSON(env, "rewards", clean);
@@ -194,13 +184,28 @@ const ROUTES = {
     return { logos: out };
   },
 
-  // 删除一笔快捷指令推送的交易（推错了、或者后来退款了）
-  "POST /api/manual/delete": async (env, body) => {
-    const store = await getJSON(env, `txns:${APPLE_ITEM}`, {});
-    if (!store[body.id]) throw httpError(404, "交易不存在");
-    delete store[body.id];
-    await putJSON(env, `txns:${APPLE_ITEM}`, store);
-    return loadAll(env);
+  // 用户上传的卡面照片（已在浏览器里裁成横版 JPEG），每张卡一个 KV 键
+  "GET /api/cardimgs": async (env) => {
+    const ids = await getJSON(env, "cardimgs", []);
+    const out = {};
+    for (const id of ids) { const v = await env.DB.get(`cardimg:${id}`); if (v) out[id] = v; }
+    return { images: out };
+  },
+  "PUT /api/cardimg": async (env, body) => {
+    const id = String(body.account_id || "");
+    if (!id) throw httpError(400, "missing account_id");
+    let ids = await getJSON(env, "cardimgs", []);
+    if (!body.data) {
+      await env.DB.delete(`cardimg:${id}`);
+      ids = ids.filter((x) => x !== id);
+    } else {
+      if (!/^data:image\/(jpeg|png|webp);base64,/.test(body.data)) throw httpError(400, "bad image");
+      if (body.data.length > 600_000) throw httpError(413, "image too large");
+      await env.DB.put(`cardimg:${id}`, body.data);
+      if (!ids.includes(id)) ids.push(id);
+    }
+    await putJSON(env, "cardimgs", ids);
+    return { ok: true };
   },
 
   "PUT /api/benefits": async (env, body) => {
@@ -283,25 +288,10 @@ async function loadAll(env) {
     });
     transactions = transactions.concat(Object.values(txns));
   }
-  const apple = await getJSON(env, `manual:${APPLE_ITEM}`, null);
-  if (apple) {
-    items.push({
-      item_id: APPLE_ITEM,
-      institution: "Apple Card",
-      manual: true,
-      last_synced: apple.last_synced,
-      error: null,
-      accounts: [{
-        id: APPLE_ACCOUNT, name: "Apple Card", official_name: "Apple Card · Goldman Sachs", mask: null,
-        type: "credit", subtype: "credit card", balance_current: null, balance_available: null, limit: null, currency: "USD",
-      }],
-    });
-    transactions = transactions.concat(Object.values(await getJSON(env, `txns:${APPLE_ITEM}`, {})));
-  }
   transactions.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
   const [benefits, rewards] = await Promise.all([
     getJSON(env, "benefits", []),
-    getJSON(env, "rewards", { cards: {}, rules: {}, balances: {}, closing: {} }),
+    getJSON(env, "rewards", { cards: {}, rules: {}, balances: {}, closing: {}, cardface: {} }),
   ]);
   return { env: env.PLAID_ENV || "sandbox", items, transactions, benefits, rewards };
 }
@@ -401,75 +391,6 @@ async function getJSON(env, key, fallback) {
 }
 
 const putJSON = (env, key, value) => env.DB.put(key, JSON.stringify(value));
-
-// ---------------------------------------------------------------- Apple Card（iOS 快捷指令）
-
-// 快捷指令请求体（JSON）：
-//   { "merchant": 商户, "amount": 金额, "card": 卡名, "date": ISO 8601 时间 }
-// amount 可以是 "$12.34" / "US$1,234.50" / 12.34 这类格式；date 不传就用收到请求的时间
-async function ingestApple(request, env, cors) {
-  if (!env.APPLE_INGEST_TOKEN) return json({ error: "Worker 未配置 APPLE_INGEST_TOKEN" }, 500, cors);
-  const h = request.headers.get("Authorization") || "";
-  const given = h.startsWith("Bearer ") ? h.slice(7).trim() : "";
-  if (!(await safeEqual(given, env.APPLE_INGEST_TOKEN))) return json({ error: "token 错误" }, 401, cors);
-
-  const body = await request.json().catch(() => null);
-  if (!body || typeof body !== "object") return json({ error: "请求体要是 JSON" }, 400, cors);
-
-  const amount = parseAmount(body.amount);
-  if (amount == null) return json({ error: `看不懂金额：${String(body.amount).slice(0, 40)}` }, 400, cors);
-  const merchant = String(body.merchant || "").trim().slice(0, 120) || "Apple Card 消费";
-  const card = String(body.card || "").trim().slice(0, 60) || null;
-
-  // 用手机发来的本地时间取日期（避免跨时区把晚上的消费算到第二天）
-  const rawDate = String(body.date || "").trim();
-  const iso = /^\d{4}-\d{2}-\d{2}/.test(rawDate) ? rawDate : new Date().toISOString();
-  const date = iso.slice(0, 10);
-
-  // 同一分钟、同金额、同商户视为重复推送（快捷指令偶尔会触发两次）
-  const id = "apl_" + (await sha256Hex(`${iso.slice(0, 16)}|${amount}|${merchant.toLowerCase()}`)).slice(0, 20);
-
-  const store = await getJSON(env, `txns:${APPLE_ITEM}`, {});
-  const dup = !!store[id];
-  store[id] = {
-    id,
-    account_id: APPLE_ACCOUNT,
-    date,
-    authorized_date: date,
-    name: merchant,
-    merchant,
-    amount, // 与 Plaid 一致：正数 = 支出
-    currency: "USD",
-    category: null,
-    category_detail: null,
-    mcc: null,
-    channel: null,
-    website: null,
-    detail: compact({ source: "shortcut", authorized_datetime: iso, card, raw_amount: String(body.amount) }) || {},
-    pending: false,
-    logo: null,
-  };
-  const meta = (await getJSON(env, `manual:${APPLE_ITEM}`, null)) || { added_at: new Date().toISOString() };
-  meta.last_synced = new Date().toISOString();
-  await Promise.all([putJSON(env, `txns:${APPLE_ITEM}`, store), putJSON(env, `manual:${APPLE_ITEM}`, meta)]);
-  return json({ ok: true, duplicate: dup, id, date, merchant, amount }, 200, cors);
-}
-
-function parseAmount(v) {
-  if (typeof v === "number") return Number.isFinite(v) ? Math.round(v * 100) / 100 : null;
-  let s = String(v ?? "").replace(/[^\d.,\-−]/g, "").replace("−", "-");
-  if (!/\d/.test(s)) return null;
-  if (s.includes(",") && s.includes(".")) s = s.replace(/,/g, "");          // 1,234.50
-  else if (/,\d{1,2}$/.test(s)) s = s.replace(/\./g, "").replace(",", "."); // 12,34（欧式小数点）
-  else s = s.replace(/,/g, "");
-  const n = parseFloat(s);
-  return Number.isFinite(n) ? Math.round(n * 100) / 100 : null;
-}
-
-async function sha256Hex(text) {
-  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
-  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
-}
 
 // ---------------------------------------------------------------- auth
 
