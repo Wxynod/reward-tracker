@@ -45,6 +45,30 @@
     aarp_travel: ["coral", "sunset"], aarp_essential: ["coral", "pearl"], barclays_other: ["azure", "slate"],
     apple_card: ["titanium", "pearl", "graphite"],
   };
+  // 你自己的卡面图库（图片存在 Worker KV，登录后加载；文件名 → 卡种 / 名称）。第一项为默认
+  const ART = {
+    csr: [["chase_sapphire_reserve_new", "Sapphire Reserve · 新款"], ["chase_sapphire_reserve_old", "Sapphire Reserve · 旧款"]],
+    csp: [["chase_sapphire_preferred_new", "Sapphire Preferred · 新款"], ["chase_sapphire_preferred_old", "Sapphire Preferred · 旧款"]],
+    cff: [["chase_freedom_flex_new", "Freedom Flex · 新款"], ["chase_freedom_flex_old", "Freedom · 旧款"]],
+    strata_premier: [["citi_strata_premier", "Strata Premier"]],
+    amex_green: [["amex_green", "Green Card"]],
+    bonvoy_brilliant: [["amex_marriott_bonvoy_brilliant", "Bonvoy Brilliant"]],
+    apple_card: [["apple_card", "Apple Card"]],
+    samsung_galaxy: [["samsung_galaxy_card", "Samsung Galaxy Card"]],
+    "debit:Chase": [["chase_debit_1", "Star Wars · 黑武士"], ["chase_debit_2", "Star Wars · BB-8"], ["chase_debit_3", "Disney · 城堡"]],
+    "debit:Schwab": [["schwab_bank_debit", "Schwab 借记卡"]],
+  };
+  let lib = {};          // 图库：名字 → dataURL
+  const artKey = (a) => {
+    if (a.type === "credit") return productKey(a);
+    const inst = String(a.institution || "").toLowerCase();
+    if (inst.includes("chase")) return "debit:Chase";
+    if (inst.includes("schwab")) return "debit:Schwab";
+    return null;
+  };
+  const artFor = (a) => (ART[artKey(a)] || []).filter(([n]) => lib[n]);
+  const allArt = () => Object.values(ART).flat().filter(([n]) => lib[n]);
+
   const ISSUER_SHORT = { Chase: "CHASE", Citi: "citi", "American Express": "AMEX", Barclays: "BARCLAYS", Apple: "", Marriott: "" };
 
   let images = {};       // account_id → 上传的卡面 dataURL
@@ -59,7 +83,10 @@
   function choice(a) {
     const c = state.rewards.cardface?.[a.id];
     if (c === "upload" && images[a.id]) return "upload";
+    if (c?.startsWith("art:") && lib[c.slice(4)]) return c;
     if (c && LIB[c]) return c;
+    const art = artFor(a);
+    if (art.length) return `art:${art[0][0]}`;   // 图库里有这张卡就默认用真实卡面
     return stylesFor(a)[0];
   }
 
@@ -71,6 +98,9 @@
     const sid = styleId || choice(full);
     if (sid === "upload" && images[full.id]) {
       return `<span class="cc cc-${size} cc-photo" style="background-image:url('${images[full.id]}')" role="img" aria-label="${esc(cardName(full))} 卡面"></span>`;
+    }
+    if (sid?.startsWith("art:") && lib[sid.slice(4)]) {
+      return `<span class="cc cc-${size} cc-photo" style="background-image:url('${lib[sid.slice(4)]}')" role="img" aria-label="${esc(cardName(full))} 卡面"></span>`;
     }
     const st = LIB[sid] || LIB.slate;
     const pk = productKey(full);
@@ -88,7 +118,11 @@
 
   // ------------------------------------------------------------ 加载上传的卡面
   async function loadImages() {
-    try { images = (await api("/api/cardimgs")).images || {}; imagesLoaded = true; render(); } catch { /* 没有就用设计卡面 */ }
+    const [u, l] = await Promise.allSettled([api("/api/cardimgs"), api("/api/cardlib")]);
+    if (u.status === "fulfilled") images = u.value.images || {};
+    if (l.status === "fulfilled") lib = l.value.images || {};
+    imagesLoaded = true;
+    render();
   }
 
   // ------------------------------------------------------------ 照片处理：转横版 + 裁成 85.6×54 比例 + 压缩
@@ -165,9 +199,11 @@
               <span>${images[a.id] ? "换一张照片" : "上传卡面照片"}<small>竖版会自动转成横版</small></span>
             </label>
           </div>
-          <h4>为这张卡推荐</h4>
+          ${artFor(a).length ? `<h4>官方卡面</h4><div class="fp-grid">${artFor(a).map(([n, label]) => tile(`art:${n}`, label)).join("")}</div>` : ""}
+          ${allArt().length > artFor(a).length ? `<details class="fp-more"><summary>图库里的其他卡面（${allArt().length - artFor(a).length}）</summary><div class="fp-grid">${allArt().filter(([n]) => !artFor(a).some(([m]) => m === n)).map(([n, label]) => tile(`art:${n}`, label)).join("")}</div></details>` : ""}
+          <h4>本站设计 · 推荐</h4>
           <div class="fp-grid">${list.slice(0, rec).map((s) => tile(s, LIB[s].name)).join("")}</div>
-          <h4>更多样式</h4>
+          <h4>本站设计 · 更多</h4>
           <div class="fp-grid">${list.slice(rec).map((s) => tile(s, LIB[s].name)).join("")}</div>
         </div>
       </div>`;

@@ -902,3 +902,6 @@ html.d-lock, html.d-lock body { overflow: hidden; }
 }
 
 .filters > .csel { border: none; padding: 0; background: none; }
+.fp-more { margin-top: 10px; }
+.fp-more summary { cursor: pointer; color: var(--muted); font-size: 12px; }
+.fp-more[open] summary { margin-bottom: 8px; }

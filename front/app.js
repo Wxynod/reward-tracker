@@ -418,8 +418,8 @@ function renderAccounts() {
         const name = cardName(a);
         const sub = name !== a.name ? a.name : (a.official_name || a.subtype || "");
         return `
-        <div class="acct${a.type === "credit" ? " has-face" : ""}">
-          ${a.type === "credit" ? `<button class="acct-face" data-face-acct="${esc(a.id)}" title="更换卡面" aria-label="更换 ${esc(name)} 的卡面">${RT_CARDS.face(state.accounts[a.id] || a, "sm")}<span>更换卡面</span></button>` : ""}
+        <div class="acct${a.type === "credit" || a.type === "depository" ? " has-face" : ""}">
+          ${a.type === "credit" || a.type === "depository" ? `<button class="acct-face" data-face-acct="${esc(a.id)}" title="更换卡面" aria-label="更换 ${esc(name)} 的卡面">${RT_CARDS.face(state.accounts[a.id] || a, "sm")}<span>更换卡面</span></button>` : ""}
           <div><div>${esc(name)}${a.mask ? " ··" + esc(a.mask) : ""}</div><div class="meta">${esc(sub)}</div></div>
           <div style="text-align:right">
             <div>${a.balance_current != null ? fmt(a.balance_current, a.currency) : "—"}</div>

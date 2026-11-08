@@ -3,3 +3,8 @@ Plaid_credentials*
 back/.dev.vars
 back/node_modules/
 back/.wrangler/
+
+# 卡面原图和导入用的 KV 数据：只存在本机和 Cloudflare KV，不进公开仓库
+cards/
+cardlib_build/
+back/cardlib.json

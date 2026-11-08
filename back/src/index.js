@@ -184,6 +184,15 @@ const ROUTES = {
     return { logos: out };
   },
 
+  // 卡面图库：用 wrangler kv bulk put 从本机导入（cardlib = 名字列表，cardlib:<名字> = 图片），只在登录后返回
+  "GET /api/cardlib": async (env) => {
+    const names = await getJSON(env, "cardlib", []);
+    const vals = await Promise.all(names.map((n) => env.DB.get(`cardlib:${n}`)));
+    const out = {};
+    names.forEach((n, i) => { if (vals[i]) out[n] = vals[i]; });
+    return { images: out };
+  },
+
   // 用户上传的卡面照片（已在浏览器里裁成横版 JPEG），每张卡一个 KV 键
   "GET /api/cardimgs": async (env) => {
     const ids = await getJSON(env, "cardimgs", []);
