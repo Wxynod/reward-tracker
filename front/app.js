@@ -849,7 +849,10 @@ function bindRewards() {
   $("#btn-edit-save").addEventListener("click", saveEdit);
   $("#btn-edit-cancel").addEventListener("click", () => setEditing(false));
   $("#btn-resync").addEventListener("click", resync);
-  $("#btn-cal").addEventListener("click", () => window.RT_CAL?.open());
+  $("#btn-cal").addEventListener("click", () => {
+    if (window.RT_CAL) RT_CAL.open();
+    else toast("日历脚本没加载到，请下拉刷新或清一下浏览器缓存");
+  });
   $("#btn-refresh").addEventListener("click", refreshFromBank);
 
   document.addEventListener("input", (e) => {

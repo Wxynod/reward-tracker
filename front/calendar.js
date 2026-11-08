@@ -12,6 +12,7 @@
   const diff = (a, b) => Math.round((parse(b) - parse(a)) / 864e5);
   const todayLocal = () => iso(new Date());
   const narrow = () => innerWidth < 640;
+  const evKey = (e) => `${e.a.id}|${e.kind}|${e.date}`;
   const md = (s) => `${+s.slice(5, 7)}/${+s.slice(8, 10)}`;
 
   const ui = { ym: todayLocal().slice(0, 7), sel: null };
@@ -85,7 +86,7 @@
       const urgent = list.some((e) => e.kind === "due" && !e.est && e.info && ["urgent", "overdue"].includes(e.info.level));
       html += `<button class="cal-day${out ? " out" : ""}${isToday ? " today" : ""}${past ? " past" : ""}${ui.sel === d ? " sel" : ""}${hasDue ? " has-due" : ""}${hasClose ? " has-close" : ""}${urgent ? " urgent" : ""}" data-day="${d}" aria-label="${+d.slice(5, 7)}月${+d.slice(8)}日${list.length ? `，${list.length} 个事项` : ""}">
         <span class="num">${+d.slice(8)}</span>
-        ${list.length ? `<span class="evs">${list.slice(0, narrow() ? 2 : 3).map((e) => `<span class="ev ${e.kind}${e.est ? " est" : ""}" title="${esc(cardName(e.a))} · ${e.kind === "close" ? "出账日" : "还款日"}${e.est ? "（预计）" : ""}">${RT_CARDS.face(e.a, "xs")}<i>${e.kind === "close" ? "账" : "还"}</i></span>`).join("")}${list.length > (narrow() ? 2 : 3) ? `<span class="more">+${list.length - (narrow() ? 2 : 3)}</span>` : ""}</span>` : ""}
+        ${list.length ? `<span class="evs">${list.slice(0, narrow() ? 2 : 3).map((e) => `<span class="ev ${e.kind}${e.est ? " est" : ""}" data-ev="${esc(evKey(e))}" title="${esc(cardName(e.a))} · ${e.kind === "close" ? "出账日" : "还款日"}${e.est ? "（预计）" : ""}">${RT_CARDS.face(e.a, "xs")}<i>${e.kind === "close" ? "账" : "还"}</i></span>`).join("")}${list.length > (narrow() ? 2 : 3) ? `<span class="more">+${list.length - (narrow() ? 2 : 3)}</span>` : ""}</span>` : ""}
       </button>`;
     }
     return { html, evs: evs.filter((e) => e.date.startsWith(ui.ym)) };
@@ -115,14 +116,15 @@
         body = `<p class="ag-note">按上期账单的间隔推算，以银行账单为准</p>`;
       }
     }
-    return `<button class="ag-item ${e.kind}${e.est ? " est" : ""}" data-open-acct="${esc(a.id)}">
+    return `<div class="ag-item ${e.kind}${e.est ? " est" : ""}" data-ev="${esc(evKey(e))}" data-date="${e.date}" tabindex="0">
       <span class="ag-face">${RT_CARDS.face(a, "sm")}</span>
       <span class="ag-main">
         <span class="ag-top"><span class="ag-kind ${e.kind}">${e.kind === "close" ? "出账日" : "还款日"}${e.est ? " · 预计" : ""}</span><span class="ag-when">${md(e.date)} · ${when}</span></span>
         <b class="ag-name">${esc(cardName(a))}${a.mask ? ` <small>··${esc(a.mask)}</small>` : ""}</b>
         ${body}
+        <button class="ag-open" data-open-acct="${esc(a.id)}">账户详情 ›</button>
       </span>
-    </button>`;
+    </div>`;
   }
   function nextCloseOf(a) {
     const last = lastClosing(a.id, todayLocal());
@@ -135,9 +137,13 @@
     if (ui.sel) {
       title = `${+ui.sel.slice(5, 7)} 月 ${+ui.sel.slice(8)} 日`;
       list = events(ui.sel, ui.sel);
-    } else {
+    } else if (ui.ym === t0.slice(0, 7)) {
       title = "接下来 45 天";
       list = events(t0, addDays(t0, 45));
+    } else {
+      const [y, m] = ui.ym.split("-").map(Number);
+      title = `${y} 年 ${m} 月`;
+      list = events(`${ui.ym}-01`, `${ui.ym}-${pad(new Date(y, m, 0).getDate())}`);
     }
     return `<div class="ag-head"><h4>${title}</h4>${ui.sel ? `<button class="btn small ghost" data-cal-clear>看全部</button>` : ""}</div>
       ${list.length ? `<div class="ag-list">${list.map(evCard).join("")}</div>` : `<p class="ag-empty">${ui.sel ? "这天没有出账或还款" : "近期没有出账或还款"}</p>`}`;
@@ -151,6 +157,40 @@
       ${nc ? `<span><i class="dot close"></i>下个出账 <b>${esc(cardName(nc.a))}</b> ${md(nc.date)}</span>` : ""}
       ${nd ? `<span><i class="dot due"></i>下个还款 <b>${esc(cardName(nd.a))}</b> ${md(nd.date)}${nd.info?.minimum_payment_amount != null ? ` · 最低 ${fmt(nd.info.minimum_payment_amount)}` : ""}</span>` : ""}
     </div>`;
+  }
+
+  // ------------------------------------------------------------ 联动高亮：列表 ↔ 日历
+  function clearHL(el) {
+    el.querySelectorAll(".hl, .pulse").forEach((n) => n.classList.remove("hl", "pulse"));
+  }
+  // 列表里的某条 → 日历上对应日期和卡面亮起；不在当前月份就让翻月按钮亮起
+  function highlightEvent(el, key, date) {
+    clearHL(el);
+    const cell = el.querySelector(`.cal-day[data-day="${date}"]`);
+    if (cell) {
+      cell.classList.add("hl");
+      el.querySelector(`.cal-grid .ev[data-ev="${CSS.escape(key)}"]`)?.classList.add("hl");
+    } else {
+      el.querySelector(`[data-cal-nav="${date < ui.ym ? -1 : 1}"]`)?.classList.add("pulse");
+    }
+    el.querySelector(`.ag-item[data-ev="${CSS.escape(key)}"]`)?.classList.add("hl");
+  }
+  // 只滚动事项列表本身（不带动整个页面）
+  function centerInStrip(item) {
+    if (!item) return;
+    const list = item.parentElement;
+    list.scrollTo({ left: item.offsetLeft - list.offsetLeft - (list.clientWidth - item.clientWidth) / 2, behavior: "smooth" });
+  }
+  // 日历上的某天 → 列表里这天的事项亮起并滚到可见
+  function highlightDay(el, date) {
+    clearHL(el);
+    const items = el.querySelectorAll(`.ag-item[data-date="${date}"]`);
+    items.forEach((n) => n.classList.add("hl"));
+    const first = items[0];
+    if (first) {
+      if (narrow()) centerInStrip(first);
+      else { const list = first.parentElement; const top = first.offsetTop - list.offsetTop; if (top < list.scrollTop || top + first.offsetHeight > list.scrollTop + list.clientHeight) list.scrollTo({ top: top - 8, behavior: "smooth" }); }
+    }
   }
 
   // ------------------------------------------------------------ 面板
@@ -177,9 +217,36 @@
       }
       if (e.target.closest("[data-cal-clear]")) { ui.sel = null; return paint(); }
       const day = e.target.closest("[data-day]");
-      if (day) { ui.sel = ui.sel === day.dataset.day ? null : day.dataset.day; if (day.dataset.day.slice(0, 7) !== ui.ym) ui.ym = day.dataset.day.slice(0, 7); return paint(); }
+      if (day) {
+        ui.sel = ui.sel === day.dataset.day ? null : day.dataset.day;
+        if (day.dataset.day.slice(0, 7) !== ui.ym) ui.ym = day.dataset.day.slice(0, 7);
+        paint();
+        if (ui.sel) highlightDay(el, ui.sel);
+        return;
+      }
       const acct = e.target.closest("[data-open-acct]");
-      if (acct) { close(); setTimeout(() => RT_ACCT.open(acct.dataset.openAcct), 120); }
+      if (acct) { close(); setTimeout(() => RT_ACCT.open(acct.dataset.openAcct), 120); return; }
+      // 点列表里的事项：亮起日历；在别的月份就直接翻过去
+      const it = e.target.closest(".ag-item");
+      if (it) {
+        const date = it.dataset.date;
+        if (date.slice(0, 7) !== ui.ym && !el.querySelector(`.cal-day[data-day="${date}"]`)) { ui.ym = date.slice(0, 7); paint(); }
+        highlightEvent(el, it.dataset.ev, date);
+        if (narrow()) centerInStrip(el.querySelector(`.ag-item[data-ev="${CSS.escape(it.dataset.ev)}"]`));
+      }
+    });
+    // 电脑：鼠标悬停联动
+    el.addEventListener("pointerover", (e) => {
+      if (e.pointerType === "touch") return;
+      const it = e.target.closest(".ag-item");
+      if (it) return highlightEvent(el, it.dataset.ev, it.dataset.date);
+      const day = e.target.closest(".cal-day");
+      if (day && el.querySelector(`.ag-item[data-date="${day.dataset.day}"]`)) return highlightDay(el, day.dataset.day);
+    });
+    el.addEventListener("pointerleave", () => clearHL(el));
+    el.addEventListener("pointerout", (e) => {
+      if (e.pointerType === "touch") return;
+      if (!e.relatedTarget || !e.relatedTarget.closest?.(".ag-item, .cal-day")) clearHL(el);
     });
     // 手机：左右滑动切月
     let x0 = null;
@@ -229,7 +296,8 @@
     const el = shell();
     el.hidden = false;
     ui.ym = todayLocal().slice(0, 7); ui.sel = null;
-    paint();
+    try { paint(); }
+    catch (err) { el.hidden = true; toast(`日历打不开：${err.message}`); console.error(err); return; }
     document.documentElement.classList.add("d-lock");
     requestAnimationFrame(() => { el.classList.add("open"); el.querySelector(".d-panel").focus({ preventScroll: true }); });
   }
