@@ -13,7 +13,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=20261108e">
+  <link rel="stylesheet" href="style.css?v=20261109a">
   <script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"></script>
 </head>
 <body>
@@ -43,6 +43,10 @@
           <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" d="M12 15.2a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4Z"/><path fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" d="M19.4 13.5a7.6 7.6 0 0 0 0-3l2-1.6-2-3.4-2.4 1a7.5 7.5 0 0 0-2.6-1.5L14 2.5h-4l-.4 2.5A7.5 7.5 0 0 0 7 6.5l-2.4-1-2 3.4 2 1.6a7.6 7.6 0 0 0 0 3l-2 1.6 2 3.4 2.4-1a7.5 7.5 0 0 0 2.6 1.5l.4 2.5h4l.4-2.5a7.5 7.5 0 0 0 2.6-1.5l2.4 1 2-3.4-2-1.6Z"/></svg>
         </button>
         <div id="settings" class="settings" hidden>
+          <section class="lang-sec" data-i18n-skip>
+            <h4>语言 · Language</h4>
+            <div class="seg lang-seg" role="group" aria-label="Language"><button type="button" data-lang="zh">中文</button><button type="button" data-lang="en">English</button></div>
+          </section>
           <section>
             <h4>积分与余额</h4>
             <p class="hint">点「更新」进入编辑：每笔交易的倍数、各计划余额都可以直接改；再点一次保存。改过的倍数会按 MCC（没有 MCC 时按商户名）记住，同一张卡的同类交易一起更新。</p>
@@ -167,16 +171,17 @@
     </span>
   </div>
   <div id="toast" role="status"></div>
-  <script src="config.js?v=20261108e"></script>
-  <script src="icons.js?v=20261108e"></script>
-  <script src="brands.js?v=20261108e"></script>
-  <script src="rewards.js?v=20261108e"></script>
-  <script src="cards.js?v=20261108e"></script>
-  <script src="drill.js?v=20261108e"></script>
-  <script src="analytics.js?v=20261108e"></script>
-  <script src="app.js?v=20261108e"></script>
-  <script src="detail.js?v=20261108e"></script>
-  <script src="acct.js?v=20261108e"></script>
-  <script src="calendar.js?v=20261108e"></script>
+  <script src="i18n.js?v=20261109a"></script>
+  <script src="config.js?v=20261109a"></script>
+  <script src="icons.js?v=20261109a"></script>
+  <script src="brands.js?v=20261109a"></script>
+  <script src="rewards.js?v=20261109a"></script>
+  <script src="cards.js?v=20261109a"></script>
+  <script src="drill.js?v=20261109a"></script>
+  <script src="analytics.js?v=20261109a"></script>
+  <script src="app.js?v=20261109a"></script>
+  <script src="detail.js?v=20261109a"></script>
+  <script src="acct.js?v=20261109a"></script>
+  <script src="calendar.js?v=20261109a"></script>
 </body>
 </html>

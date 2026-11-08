@@ -1298,3 +1298,10 @@ html, body { overflow-x: clip; }
 .ag-kind.fee { color: #9a7215; }
 .ad-fee { display: flex; align-items: flex-start; gap: 8px; margin-top: 12px; padding: 10px 12px; border-radius: 10px; background: color-mix(in srgb, #b88a1e 7%, var(--paper)); font-size: 13px; line-height: 1.6; }
 .ad-fee .lg { flex: none; margin-top: 2px; }
+
+/* 语言切换 */
+.lang-sec { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-top: 4px !important; }
+.lang-sec h4 { margin: 0; }
+.lang-seg button { padding: 4px 14px; font: inherit; font-size: 13px; }
+html[lang="en"] .brand .sub, html[lang="en"] .login-card .sub { display: none; }
+html[lang="en"] .brand h1, html[lang="en"] .login-card h1 { letter-spacing: .02em; }

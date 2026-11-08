@@ -1,134 +1,289 @@
-# Reward Tracker 记账本
+# 记账本 · Reward Tracker
+
+A private, single-user bookkeeping and credit-card rewards dashboard. It pulls transactions, balances and statements from US banks through **Plaid**, estimates the points every purchase earns on each card, and turns it all into a billing calendar, benefit trackers and spending analytics. The interface is available in **English and Chinese**.
+
+- **Frontend**: static vanilla JS on GitHub Pages: <https://wxynod.github.io/reward-tracker/>
+- **Backend**: a Cloudflare Worker with Workers KV that proxies Plaid and stores the data
+- **No framework, no build step, no database server**: the charts are hand-drawn SVG and the whole UI is one page
+
+> The screenshots are taken from my own live account. Account numbers, Plaid IDs, Zelle counterparties and reference numbers are masked as `****`. Card images are replaced by the app's built-in generated card faces, because the real card art stays out of this public repo.
+
+![Points overview](docs/screenshots/01-points-overview.png)
+
+**Contents:** [Points](#points) · [Transactions](#transactions) · [Accounts](#accounts) · [Billing calendar](#billing-calendar) · [Benefits](#benefits) · [Analytics](#analytics) · [Language](#language) · [Mobile](#mobile) · [Points engine](#how-points-are-estimated) · [Architecture](#architecture) · [Setup](#setup)
+
+---
+
+## What it does
+
+### Points
+
+- **One card per loyalty program**: Chase Ultimate Rewards, Citi ThankYou, Amex Membership Rewards, Marriott Bonvoy, Barclays cash back and Apple Daily Cash. Programs with no linked card are hidden.
+- **Balance + Pending.** You record the balance shown by the bank. Points earned since the last statement closing date show as *Pending* and roll into the balance automatically once the closing date passes.
+- **Points ledger.** Each program's points for today, this week, month, quarter and year.
+
+The **points trend** chart drills down from all time → year → quarter → month → day. Double-click a bar to go down, use the breadcrumb to come back up, or jump to any period with *Pick period*.
+
+![Points trend](docs/screenshots/02-points-trend.png)
+
+**This month by card** shows each card's points, spend, average multiplier and the categories that earned them.
+
+![This month by card](docs/screenshots/03-points-by-card.png)
+
+### Transactions
+
+- Monthly list grouped by day, with card, month and text filters, plus a clickable category bar.
+- Each row shows the merchant logo (Brandfetch, with category icons as fallback), **Pending** and **payment-channel** (in store / online) tags, and the estimated points with the multiplier used.
+- **Benefit credits** (e.g. the Brilliant $25 dining credit) and **annual fees** are recognised and earn no points.
+
+![Transactions](docs/screenshots/04-transactions.png)
+
+Tap a row to open the **transaction detail sheet**. It shows authorised vs posted time, MCC, the app category and Plaid's category with its confidence, the original bank description, the merchant website and counterparties. At the bottom it explains the points: which rule matched, the multiplier, and the key used to remember manual changes.
+
+<table>
+<tr>
+<td width="50%"><img src="docs/screenshots/05-transaction-detail-1.png" alt="Transaction detail, top"></td>
+<td width="50%"><img src="docs/screenshots/05-transaction-detail-2.png" alt="Transaction detail, points section"></td>
+</tr>
+<tr>
+<td align="center"><sub>Status, merchant and category</sub></td>
+<td align="center"><sub>Counterparties and how the points were calculated</sub></td>
+</tr>
+</table>
+
+### Accounts
+
+- Every linked bank and account, with a card face, balance, credit limit and a utilisation bar.
+- A chip on each card shows the next **payment due date**: date, days left and minimum payment.
+- Card faces come from a built-in style library. Private card images can also be loaded from KV, or uploaded as a photo, which is rotated, cropped and compressed in the browser.
+
+![Accounts](docs/screenshots/06-accounts.png)
+
+The **account detail sheet** combines Plaid **Liabilities** data with the app's own calculations:
+
+<table>
+<tr>
+<td width="50%"><img src="docs/screenshots/07-account-detail-1.png" alt="Account detail, balances and statement"></td>
+<td width="50%"><img src="docs/screenshots/07-account-detail-2.png" alt="Account detail, billing cycle and earn rules"></td>
+</tr>
+<tr>
+<td align="center"><sub>Balances, last statement, minimum payment, due date and APRs</sub></td>
+<td align="center"><sub>Billing-cycle progress, closing day, earn rules and annual fee</sub></td>
+</tr>
+</table>
+
+### Billing calendar
+
+- Shows statement **closing days**, **payment due dates** and **annual-fee dates** for every card, each marked with a small card face.
+- Annual fees are found by searching past transactions for "annual / membership fee"; the next one is projected a year later. Future due dates are estimated from the closing day.
+- Hovering an agenda item highlights its day, and hovering a day highlights its events. From an event you can open the account sheet on top of the calendar; closing it returns to the calendar.
+
+![Billing calendar](docs/screenshots/08-billing-calendar.png)
+
+### Benefits
+
+- The **Bonvoy Brilliant monthly $25 dining credit** is tracked automatically, with the matching purchases listed.
+- So is the **Freedom Flex quarterly 5% rotation**, with progress towards the $1,500 cap and the activation deadline.
+- You can add custom tasks: a card, a date range, optional merchant keywords, and a spend amount or purchase-count target.
+
+![Benefits](docs/screenshots/09-benefits.png)
+
+### Analytics
+
+- **KPIs**: month to date, month-end projection, 30-day daily average and average ticket.
+- **Spending trend** by card or by category, with the same drill-down as the points chart.
+- **Category × time** heat-matrix, with automatic notes on unusual changes.
+
+![Analytics: KPIs, trend and category matrix](docs/screenshots/10-analytics-1.png)
+
+- **By card / by category**: spend share, points and average multiplier. **Single card**: 12-month trend, multiplier mix, category mix, top merchants and how much spend earned a bonus.
+- **Weekday pattern**, **top merchants**, a GitHub-style **spending calendar** and the **largest purchases**.
+
+<table>
+<tr>
+<td width="50%"><img src="docs/screenshots/10-analytics-2.png" alt="Analytics: by card, by category, single card"></td>
+<td width="50%"><img src="docs/screenshots/10-analytics-3.png" alt="Analytics: weekday, merchants, calendar, largest"></td>
+</tr>
+</table>
+
+### Language
+
+The language switch sits at the top of the settings panel (⚙). The choice is saved in the browser, and every page, sheet, chart label, tooltip and message follows it.
+
+<table>
+<tr>
+<td width="50%"><img src="docs/screenshots/11-language-en.png" alt="Settings in English"></td>
+<td width="50%"><img src="docs/screenshots/11-language-zh.png" alt="Settings in Chinese"></td>
+</tr>
+<tr>
+<td align="center"><sub>English</sub></td>
+<td align="center"><sub>中文</sub></td>
+</tr>
+</table>
+
+### Mobile
+
+On small screens the layout becomes a phone layout: sheets open as bottom sheets, the calendar goes full screen, and tables collapse into labelled rows. The app can be saved to the home screen through its web-app manifest and icons.
+
+![Mobile](docs/screenshots/12-mobile.png)
+
+---
+
+## How points are estimated
+
+The rewards engine is `front/rewards.js`.
+
+1. Each account is mapped to a **card product**. Mapping is automatic from the account name, or you choose it in Settings. Generic names such as "CREDIT CARD" get a picker.
+2. Each transaction is classified by **MCC**. When Plaid has no MCC, the app uses Plaid's `personal_finance_category`, and then any merchant rules you have taught it.
+3. The product's rules give the multiplier. Supported rule types:
+   - bonus categories with a fallback base rate
+   - **caps**, e.g. Freedom Flex 5% up to $1,500 per quarter, then 1x
+   - **date-bounded rules** with `from`/`to`, which is how quarterly rotations are added
+   - **stacked rates** ("7x = 1 base + 4 + 2 everyday dining")
+   - "top category of the month" logic for Custom Cash
+4. Refunds give points back. Payments, transfers, benefit credits and annual fees earn **0**.
+5. In edit mode (gear → *Update*) you can override the multiplier on any transaction. The override is remembered per MCC or per merchant.
+
+**Built-in products**
+
+| Issuer | Cards |
+|---|---|
+| Chase | Sapphire Reserve, Sapphire Preferred, Freedom Unlimited, Freedom Flex |
+| Citi | Strata Elite, Strata Premier, Strata, Double Cash, Custom Cash |
+| American Express | Platinum, Gold, Green, Blue Business Plus, Blue Cash Everyday/Preferred, EveryDay, Marriott Bonvoy Brilliant |
+| Barclays | Samsung Galaxy Card, View, AARP Travel/Essential |
+| Apple | Apple Card |
+
+Each issuer also has an "other" product. Points are **estimates**; the bank statement is always the source of truth.
+
+---
+
+## Architecture
 
 ```
-front/   静态前端 → GitHub Pages（Noto Serif SC）
-back/    Cloudflare Worker → 代理 Plaid、存数据到 KV
+ Browser (GitHub Pages)                 Cloudflare Worker                     Plaid
+┌──────────────────────┐   HTTPS +    ┌──────────────────────────┐   API    ┌──────────────┐
+│ index.html + *.js    │ ───────────▶ │ /api/*  (CORS-locked)    │ ───────▶ │ Transactions │
+│ vanilla JS, SVG      │  Bearer      │ HMAC session tokens      │          │ Liabilities  │
+│ Plaid Link (iframe)  │  token       │ Plaid secret lives here  │          │ Institutions │
+└──────────────────────┘              └────────────┬─────────────┘          └──────────────┘
+                                                   │
+                                            Workers KV (DB)
+                               items, access tokens, transactions,
+                         sync cursors, liabilities, rewards settings,
+                             benefits, card-face library, logos
 ```
 
-Plaid secret 只存在 Worker 里（`wrangler secret`），前端和 GitHub 仓库里都没有。
-`Credentials.txt` 已写进 `.gitignore`，**不要提交**。
+### Plaid usage
+| Endpoint | Purpose |
+|---|---|
+| `/link/token/create` | New links request `transactions` with `optional_products: ["liabilities"]`. Update mode with `additional_consented_products` adds Liabilities to existing links without using up a new connection. |
+| `/item/public_token/exchange` | Stores the access token in KV (server side only). |
+| `/transactions/sync` | Incremental sync with stored cursors and `include_original_description`. A full re-sync is non-destructive: previous accounts are kept if Plaid temporarily returns none. |
+| `/transactions/refresh` | "Refresh from bank now" button. |
+| `/accounts/get`, `/liabilities/get` | Balances, limits, statement balance, minimum payment, due date and APRs. These also feed auto-detection of the closing day. |
+| `/institutions/get_by_id` | Bank logos and brand colours, cached in KV. |
 
-前端有登录页：账号密码由 Worker 校验（存成 Cloudflare secret），登录后发 14 天有效的签名令牌；同一 IP 连续输错 5 次锁 15 分钟。没登录读不到任何数据。
+Each transaction is slimmed before storage. It keeps the amount, dates, merchant, MCC, PFC category, payment channel, pending flag and website, plus a compact `detail` object used by the detail sheet.
 
-## 一、部署后端（Cloudflare Worker）
+### Worker API
 
-在 `back/` 目录下运行：
+Every route except `/api/login` requires `Authorization: Bearer <session token>`.
+
+| Method | Path | Description |
+|---|---|---|
+| POST | `/api/login` | `{username, password}` → `{token, exp}` |
+| POST | `/api/link-token` | Creates a Link token. With `item_id` it opens update mode; `add_liabilities` requests Liabilities consent. |
+| POST | `/api/exchange` | Exchanges `public_token` and stores the item |
+| POST | `/api/sync` | Incremental `/transactions/sync` for all items, plus balances and liabilities |
+| POST | `/api/refresh` | Asks Plaid to refresh from the bank |
+| POST | `/api/resync` | Resets cursors and re-pulls full history (non-destructive) |
+| GET | `/api/data` | Items, accounts (with liabilities), transactions, benefits, rewards settings |
+| POST | `/api/items/remove` | Disconnects a bank and deletes its data |
+| PUT | `/api/rewards` | Card mapping, learned rules, balances, closing days, card faces |
+| PUT | `/api/benefits` | Benefit and task list |
+| GET | `/api/logos` | Institution logos (KV cache) |
+| GET | `/api/cardlib` | Private card-art library (KV only, never in the repo) |
+| GET / PUT | `/api/cardimgs`, `/api/cardimg` | User-uploaded card photos |
+
+### Frontend files (`front/`)
+| File | Role |
+|---|---|
+| `index.html`, `style.css` | Shell, tabs, sheets; warm "paper" theme in Noto Serif SC; responsive below 560 px |
+| `i18n.js` | English / Chinese switch. The UI is written in Chinese; in English mode a `MutationObserver` translates text nodes and `placeholder` / `title` / `aria-label` before paint, using exact phrases, regex rules (dates, amounts, counts) and phrase fragments. Untranslated strings are collected in `RT_I18N.missing`. |
+| `config.js` | Worker URL and Brandfetch client ID (public by design) |
+| `app.js` | State, API client, login, Plaid Link, Points / Transactions / Accounts tabs, edit mode |
+| `rewards.js` | Programs, card products, earn rules, points engine |
+| `icons.js` | 35+ category icons and MCC/PFC → category mapping |
+| `brands.js` | Merchant → domain mapping and Brandfetch logo/search |
+| `cards.js` | Card-face styles, art library, face chooser, photo processing, custom card selects |
+| `drill.js` | Reusable drill-down bar chart with breadcrumbs and period picker |
+| `analytics.js` | Analytics tab |
+| `detail.js` | Transaction detail sheet |
+| `acct.js` | Account detail sheet |
+| `calendar.js` | Billing calendar |
+
+All script and style tags carry a `?v=YYYYMMDDx` query for cache busting (currently `20261109a`). Bump it on every frontend change.
+
+---
+
+## Setup
+
+### 1. Backend (Cloudflare Worker)
 
 ```bash
+cd back
 npm install
 npx wrangler login
 
-# 1. 建 KV，把输出里的 id 填进 wrangler.toml 的 REPLACE_WITH_KV_NAMESPACE_ID
+# KV namespace → put the returned id into wrangler.toml ([[kv_namespaces]] id)
 npx wrangler kv namespace create DB
 
-# 2. 设置机密（会提示你粘贴值）
+# Secrets (prompted, never committed)
 npx wrangler secret put PLAID_CLIENT_ID
-npx wrangler secret put PLAID_SECRET     # 先用 Sandbox secret
-npx wrangler secret put APP_USERNAME     # 登录账号（Credentials.txt 里的）
-npx wrangler secret put APP_PASSWORD     # 登录密码（Credentials.txt 里的）
-npx wrangler secret put SESSION_SECRET   # 一串长随机字符串，用来签登录令牌
+npx wrangler secret put PLAID_SECRET
+npx wrangler secret put APP_USERNAME
+npx wrangler secret put APP_PASSWORD
+npx wrangler secret put SESSION_SECRET   # node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
 
-# 3. 部署（ALLOWED_ORIGINS 已设为 https://wxynod.github.io）
 npx wrangler deploy
 ```
 
-部署成功后会得到一个类似 `https://reward-tracker.<你的子域>.workers.dev` 的地址。
+`wrangler.toml` vars:
 
-生成 SESSION_SECRET 可以用：`node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"`
+| Var | Meaning |
+|---|---|
+| `PLAID_ENV` | `sandbox` (test with `user_good` / `pass_good`) or `production` |
+| `ALLOWED_ORIGINS` | Comma-separated frontend origins allowed by CORS |
+| `PLAID_REDIRECT_URI` | Needed for OAuth banks (Chase etc.). Must match **Allowed redirect URIs** in the Plaid Dashboard. |
 
-## 二、部署前端（GitHub Pages）
+Switching from Sandbox to Production needs the production secret. Banks must also be re-linked, because access tokens are environment-specific.
 
-仓库：https://github.com/Wxynod/reward-tracker　页面：https://wxynod.github.io/reward-tracker/
-
-1. 仓库 Settings → Pages → Source 选 **GitHub Actions**（只需设置一次）
-2. 把 `front/config.js` 里的 `workerUrl` 改成上一步得到的 Worker 地址，push
-3. 之后每次 push 改动 `front/`，`.github/workflows/pages.yml` 会自动重新发布
-
-本地预览：`cd front && python -m http.server 8000`，然后打开 http://localhost:8000
-
-## 三、从 Sandbox 切到真实卡片
-
-1. Sandbox 下连接银行，用户名 `user_good`、密码 `pass_good`，先确认流程正常
-2. `wrangler.toml` 里把 `PLAID_ENV` 改成 `production`，`wrangler secret put PLAID_SECRET` 换成 Production secret，再 `wrangler deploy`
-3. 重新连接银行（Sandbox 的连接在 Production 下无效，可以先在「账户」里断开）
-4. 走 OAuth 的银行（Chase、Capital One 等）：在 Plaid Dashboard 的 Allowed redirect URIs 里加上 `https://wxynod.github.io/reward-tracker/`，并填到 `PLAID_REDIRECT_URI`
-
-## 四、Apple Card（iOS 快捷指令推送）
-
-Apple Card 由 Goldman Sachs 发卡，Plaid 连不上；Apple 的 FinanceKit 只批给 App Store 上架的公司级 App。
-所以改用 iOS 快捷指令：每次用 Apple Pay 付款，手机自动把商户、金额、时间 POST 给 Worker。
-只能拿到这三项，**没有 MCC、余额，也抓不到实体卡 / 卡号消费**。积分按 Apple Card 的 Apple Pay 2%（Apple 3% 商户按商户名识别）估算。
-
-**1. Worker 加一个密钥并重新部署**（在 `back/` 下）
+**Optional private card art.** Card images are kept locally (`cards/`, `cardlib_build/`, which are git-ignored) and uploaded straight to KV:
 
 ```bash
-node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"   # 生成一串，记下来
-npx wrangler secret put APPLE_INGEST_TOKEN   # 粘贴上面那串
-npx wrangler deploy
+npx wrangler kv bulk put cardlib.json --binding DB --remote
 ```
 
-先用 curl 试一下（应返回 `{"ok":true,...}`，网页上会出现 Apple Card 账户和这笔测试交易，看到后在交易明细里点「删除这笔交易」）：
+### 2. Frontend (GitHub Pages)
 
-```bash
-curl -X POST https://reward-tracker.tom-rt.workers.dev/api/ingest/apple-card \
-  -H "Authorization: Bearer <APPLE_INGEST_TOKEN>" -H "Content-Type: application/json" \
-  -d '{"merchant":"Test","amount":"$1.23","date":"2026-11-08T10:00:00+08:00"}'
-```
+1. Repo **Settings → Pages → Source: GitHub Actions**. This is a one-time step.
+2. Set `workerUrl` in `front/config.js`.
+3. Push. `.github/workflows/pages.yml` publishes `front/` on every change.
 
-**2. iPhone 上建自动化**（快捷指令 App；不同 iOS 版本的按钮名称可能略有出入）
+Local preview: `cd front && python -m http.server 8000`, then open <http://localhost:8000>. `localhost:8000` is already in `ALLOWED_ORIGINS`.
 
-1. 「自动化」→ 右上角「+」→ 选「钱包 / Wallet」
-2. 卡片勾选 **Apple Card**，类别全选 →「立即运行」（关掉「运行前询问」）→ 下一步 →「新建空白快捷指令」
-3. 添加操作 **「获取 URL 内容」**：
-   - URL：`https://reward-tracker.tom-rt.workers.dev/api/ingest/apple-card`
-   - 展开 → 方法 **POST**
-   - 头部：`Authorization` = `Bearer <APPLE_INGEST_TOKEN>`（Bearer 后面有一个空格）
-   - 请求体选 **JSON**，加 4 个文本字段：
+---
 
-     | 键 | 值（点变量选择） |
-     |---|---|
-     | `merchant` | 快捷指令输入 → **商户** |
-     | `amount` | 快捷指令输入 → **金额** |
-     | `card` | 快捷指令输入 → **名称**（卡名，可不加） |
-     | `date` | **当前日期** → 点它把日期格式改成 **ISO 8601**，并打开「包括时间」 |
+## Security notes
 
-   `date` 一定要传：不传的话 Worker 按 UTC 记日期，北京时间早上 8 点前的消费会被记到前一天。
-4. （调试用，可选）再加一个「显示通知」，内容选上一步的「URL 的内容」，确认能看到 `"ok":true` 后删掉
+- The Plaid secret and access tokens exist **only in the Worker and KV**. They are never in the browser or the repo.
+- Login is checked against Worker secrets with a constant-time comparison. A successful login returns a **14-day HMAC-signed session token**. Rotating `SESSION_SECRET` signs out every device.
+- **5 failed logins from one IP lock that IP out for 15 minutes.**
+- CORS only allows the configured origins. Every data route requires a valid session.
+- `.gitignore` excludes `Credentials*`, `back/.dev.vars`, `.wrangler/`, and the private card art and its KV import file.
 
-**说明**
-- 同一分钟、同金额、同商户的重复推送会自动合并
-- 退款、还款、实体卡消费不会推送；推错的交易在网页交易明细底部「删除这笔交易」
-- 账户页 Apple Card 的「清空」会删掉所有推送记录（不影响以后继续推送）
-- 密钥泄露了就 `wrangler secret put APPLE_INGEST_TOKEN` 换一个，再更新快捷指令
+## Notes
 
-## API
-
-除 `/api/login` 外都需要带 `Authorization: Bearer <登录令牌>`。
-
-| 方法 | 路径 | 说明 |
-|---|---|---|
-| POST | /api/login | `{username, password}` → `{token, exp}` |
-| POST | /api/link-token | 创建 Link token；带 `item_id` 时用于重新登录 |
-| POST | /api/exchange | 用 public_token 换 access_token 并存储 |
-| POST | /api/sync | 用 /transactions/sync 增量同步所有连接 |
-| GET | /api/data | 返回连接、账户、交易、权益任务 |
-| PUT | /api/benefits | 保存权益任务列表 |
-| POST | /api/items/remove | 断开一个银行连接 |
-| POST | /api/resync | 清空 cursor，重新拉取全部交易（补齐 MCC 等新字段） |
-| PUT | /api/rewards | 保存积分设置：卡片对应、记住的倍数、各计划余额 |
-| GET | /api/logos | 各银行 logo（Plaid 机构信息，KV 缓存 30 天） |
-| POST | /api/ingest/apple-card | **iOS 快捷指令用**，带 `Authorization: Bearer <APPLE_INGEST_TOKEN>`（不是登录令牌） |
-| POST | /api/manual/delete | `{id}` 删除一笔快捷指令推送的交易 |
-
-## 积分估算
-
-- 卡片目录和倍数在 `front/rewards.js`（`PRODUCTS`），按 MCC 分类，没有 MCC 时用 Plaid 的 personal_finance_category
-- 支持 cap（如 Amex Gold 餐饮 $50k/年）、季度轮换（Freedom Flex，新季度在 `quarters` 里加一行）、Custom Cash 月度最高类别
-- 页面右上角设置 →「更新」进入编辑：逐笔改倍数（按 MCC 或商户名记住）、录入各计划余额，再点保存
-- 积分为估算值，以银行账单为准
-
-## 权益任务的计算方式
-
-- 按 卡片 + 日期区间 + 商户关键词（可选）筛选交易
-- 「消费金额」按净额计算，退款会抵扣；「消费笔数」只统计支出笔数
-- Plaid 的金额正数表示支出，负数表示退款或还款
+- Plaid amounts are positive for spending and negative for refunds and payments. Benefit-progress amounts are net of refunds.
+- Points and benefit progress are estimates for personal tracking only.
