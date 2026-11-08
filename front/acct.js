@@ -210,9 +210,11 @@
     el.querySelector('[data-ad-step="1"]').disabled = i < 0 || i >= ids.length - 1;
   }
 
-  function open(id, { face = false } = {}) {
+  // over：从日历等其他面板里打开时叠在上面，关闭后回到原来的面板
+  function open(id, { face = false, over = false } = {}) {
     if (!state.accounts[id]) return;
     const el = shell();
+    el.classList.toggle("over", over);
     current = id; faceOpen = face;
     el.hidden = false;
     paint();
@@ -229,8 +231,8 @@
     if (!el || el.hidden) return;
     el.classList.remove("open");
     el.querySelector(".d-panel").style.transform = "";
-    document.documentElement.classList.remove("d-lock");
-    setTimeout(() => { el.hidden = true; }, 240);
+    if (!document.querySelector("#bill-cal.open")) document.documentElement.classList.remove("d-lock");
+    setTimeout(() => { el.hidden = true; el.classList.remove("over"); }, 240);
     current = null;
   }
   function step(dir) {
@@ -247,8 +249,9 @@
     if (r && e.key === "Enter") { e.preventDefault(); open(r.dataset.acct); return; }
     const el = document.getElementById("acct-detail");
     if (!el || el.hidden) return;
-    if (e.key === "Escape") { e.stopPropagation(); close(); }
+    if (e.key === "Escape") { e.stopImmediatePropagation(); close(); return; }
     if (e.target.matches?.("input, select")) return;
+    e.stopImmediatePropagation();
     if (e.key === "ArrowLeft") step(-1);
     if (e.key === "ArrowRight") step(1);
   }, true);

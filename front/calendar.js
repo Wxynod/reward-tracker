@@ -225,7 +225,8 @@
         return;
       }
       const acct = e.target.closest("[data-open-acct]");
-      if (acct) { close(); setTimeout(() => RT_ACCT.open(acct.dataset.openAcct), 120); return; }
+      // 账户详情叠在日历上面打开，关掉后回到日历
+      if (acct) { RT_ACCT.open(acct.dataset.openAcct, { over: true }); return; }
       // 点列表里的事项：亮起日历；在别的月份就直接翻过去
       const it = e.target.closest(".ag-item");
       if (it) {
@@ -312,6 +313,8 @@
   document.addEventListener("keydown", (e) => {
     const el = document.getElementById("bill-cal");
     if (!el || el.hidden) return;
+    const ad = document.getElementById("acct-detail");
+    if (ad && !ad.hidden) return;   // 账户详情叠在上面时，按键交给它
     if (e.key === "Escape") { e.stopPropagation(); close(); }
     if (e.key === "ArrowLeft") el.querySelector('[data-cal-nav="-1"]')?.click();
     if (e.key === "ArrowRight") el.querySelector('[data-cal-nav="1"]')?.click();

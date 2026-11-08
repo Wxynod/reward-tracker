@@ -1284,3 +1284,4 @@ html, body { overflow-x: clip; }
   .ag-item { flex: 0 0 82%; scroll-snap-align: center; }
   .ag-empty { padding: 10px 0; }
 }
+#acct-detail.over { z-index: 95; }
