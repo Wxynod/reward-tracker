@@ -245,7 +245,9 @@ async function syncItem(env, itemId, { full = false } = {}) {
     }
   }
 
-  const store = full ? {} : await getJSON(env, `txns:${itemId}`, {});
+  // 全量重拉也不清空旧数据：只用 Plaid 返回的新增 / 修改覆盖、按 removed 删除。
+  // （Apple Card 这类经 FinanceKit 的连接，Plaid 不一定能重新返回全部历史，清空会把交易弄丢）
+  const store = await getJSON(env, `txns:${itemId}`, {});
   for (const t of [...result.added, ...result.modified]) store[t.transaction_id] = slimTxn(t);
   for (const r of result.removed) delete store[r.transaction_id];
 
@@ -253,6 +255,11 @@ async function syncItem(env, itemId, { full = false } = {}) {
   let accounts;
   try { accounts = (await plaid(env, "/accounts/get", { access_token: item.access_token })).accounts; }
   catch { accounts = result.accounts || []; }
+  // 这次没拿到账户时保留上次的账户列表，避免账户「消失」
+  if (!accounts?.length) {
+    const prev = await getJSON(env, `accounts:${itemId}`, []);
+    if (prev.length) accounts = null;
+  }
 
   // 信用卡负债：账单金额 / 出账日 / 最低还款 / 还款日 / APR。拿不到不影响交易同步
   const liab = await pullLiabilities(env, item);
@@ -263,7 +270,7 @@ async function syncItem(env, itemId, { full = false } = {}) {
   await Promise.all([
     liab ? putJSON(env, `liab:${itemId}`, liab) : null,
     putJSON(env, `txns:${itemId}`, store),
-    putJSON(env, `accounts:${itemId}`, accounts.map(slimAccount)),
+    accounts ? putJSON(env, `accounts:${itemId}`, accounts.map(slimAccount)) : null,
     putJSON(env, `item:${itemId}`, item),
   ]);
 }

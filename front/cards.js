@@ -54,7 +54,7 @@
     amex_green: [["amex_green", "Green Card"]],
     bonvoy_brilliant: [["amex_marriott_bonvoy_brilliant", "Bonvoy Brilliant"]],
     apple_card: [["apple_card", "Apple Card"]],
-    samsung_galaxy: [["samsung_galaxy_card", "Samsung Galaxy Card"]],
+    samsung_galaxy: [["samsung_galaxy_card_rounded", "Samsung Galaxy · 圆角"], ["samsung_galaxy_card", "Samsung Galaxy Card"]],
     "debit:Chase": [["chase_debit_1", "Star Wars · 黑武士"], ["chase_debit_2", "Star Wars · BB-8"], ["chase_debit_3", "Disney · 城堡"]],
     "debit:Schwab": [["schwab_bank_debit", "Schwab 借记卡"]],
   };
