@@ -736,8 +736,9 @@ html.d-lock, html.d-lock body { overflow: hidden; }
 .d-timeline .bar { height: 2px; margin-top: 8px; background: repeating-linear-gradient(90deg, #c9c2b6 0 6px, transparent 6px 11px); }
 .d-timeline .bar.done { background: var(--jade); opacity: .5; }
 
-.d-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 14px; }
+.d-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 14px; }
 .d-sec { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; margin-top: 12px; min-width: 0; }
+.d-merchant { grid-column: 2; grid-row: 1 / span 2; }
 .d-grid .d-sec { margin-top: 0; }
 .d-sec h4 { margin: 0 0 8px; font-size: 12px; letter-spacing: .12em; color: var(--muted); font-weight: 600; }
 .d-sec dl, .d-raw dl { margin: 0; }
@@ -789,7 +790,8 @@ html.d-lock, html.d-lock body { overflow: hidden; }
   .d-icon { width: 52px; height: 52px; border-radius: 15px; }
   .d-amt { grid-column: 1 / -1; text-align: left; font-size: 28px; }
   .d-amt small { display: inline; margin-left: 6px; }
-  .d-grid { grid-template-columns: 1fr; }
+  .d-grid { grid-template-columns: minmax(0, 1fr); }
+  .d-merchant { grid-area: auto; }
   .d-earn { text-align: left; }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -1456,9 +1458,4 @@ html[lang="en"] .brand h1, html[lang="en"] .login-card h1 { letter-spacing: .02e
   .ad-stats b { font-size: 15.5px; letter-spacing: -.01em; overflow-wrap: anywhere; }
 }
 
-/* 交易详情里的地图（Leaflet + OpenStreetMap） */
-.d-map { position: relative; z-index: 0; height: 200px; margin-top: 10px; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: #ece6da; }
-.d-map-note { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); font-size: 12px; }
-.d-map-tag { position: absolute; left: 8px; top: 8px; z-index: 500; background: rgba(255, 255, 255, .92); border: 1px solid var(--line); border-radius: 6px; padding: 1px 7px; font-size: 11px; color: var(--muted); }
-.d-map .leaflet-control-attribution { font-size: 10px; }
-@media (max-width: 560px) { .d-map { height: 180px; } }
+.d-map { display: block; width: 100%; height: 212px; margin-top: 10px; border: 1px solid var(--line); border-radius: 10px; background: #ece6da; }

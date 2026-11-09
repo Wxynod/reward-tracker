@@ -24,6 +24,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/configure-pages@v5
+      - name: Configure Google Maps Embed
+        env:
+          MAPS_KEY: ${{ secrets.GOOGLE_MAPS_EMBED_KEY }}
+        run: node -e "require('fs').writeFileSync('front/maps-key.js', 'window.RT_CONFIG.googleMapsEmbedKey = ' + JSON.stringify(process.env.MAPS_KEY || '') + ';')"
       - uses: actions/upload-pages-artifact@v3
         with:
           path: front

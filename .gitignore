@@ -14,3 +14,8 @@ amex_hk_statements/
 
 # 汇丰香港结单原件（PDF）：含消费明细与卡号，只留在本机
 hsbc_hk_statements/
+
+# 给其他 AI 助手的交接说明：只留在本机
+CHATGPT.md
+/CLAUDE.md
+/front/maps-key.js
