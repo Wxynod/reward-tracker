@@ -174,7 +174,7 @@
     "不会自动同步。": "No automatic sync.",
     "「同步」「立刻从银行刷新」对它没有作用；只有打开 Amex 网银的交易页面时才会更新。":
       " “Sync” and “Refresh from bank now” don’t affect it; it only updates when you open the Amex online banking activity page.",
-    "当前欠款": "Current balance", "是已导入的已入账交易的累计，待入账和还没推送的消费不在里面。": " is the running total of imported posted transactions; pending and not-yet-pushed purchases are not included.",
+    "当前欠款": "Current balance", "当前欠款、可用额度、还款日、最低还款": "Current balance, available credit, due date and minimum payment",
     "金额是港币。": "Amounts are in HKD.",
     "按固定汇率 1 USD = 7.8 HKD 换算成美元参与汇总，和 Amex 实际入账汇率无关；港币原值显示在旁边。":
       " They are converted to USD at a fixed 1 USD = 7.8 HKD for totals, independent of Amex’s actual rates; the original HKD amount is shown alongside.",
@@ -290,6 +290,9 @@
     R("记得在 (\\S+) 前激活", (_, d) => `activate by ${d}`),
     R("上次同步：(.+)", (_, d) => `Last synced: ${d}`),
     R("上次导入：(.+)", (_, d) => `Last imported: ${d}`),
+    R("取自 Amex 网银首页（總結欠 / 可用信用額），打开网银时更新，最近一次是 (.+)。", (_, d) => ` come from the Amex online banking home page (total balance / available credit) and update when you open it; last updated ${d}.`),
+    R("取自 Amex 网银首页（總結欠 / 可用信用額），打开网银时更新；还没抓到过时，欠款按已导入交易累计。", () => " come from the Amex online banking home page and update when you open it; until then the balance is the running total of imported transactions."),
+    R("账单数据来自 Amex 网银 · (.+)", (_, d) => `Statement data from Amex online banking · ${d}`),
     R("按 1 USD = ([\\d.]+) (\\w+) 换算成美元显示", (_, r, c) => `shown in USD at 1 USD = ${r} ${c}`),
     R("汇率 ([\\d.]+)", (_, r) => `rate ${r}`),
     R("自动 · 来自上期出账日 (\\S+)", (_, d) => `Auto · from last closing ${d}`),

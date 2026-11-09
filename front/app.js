@@ -26,7 +26,7 @@ const fmtOrig = (v, cur) => (cur === "HKD"
 const isManual = (a) => a?.source === "manual";
 // 问卷里填 N/A 的账单字段：值换成 null（其余代码按「未知」处理），键名记在 L.na 里，界面显示「没有」
 const naVal = (L, key, f) => (L?.na?.includes(key) ? "没有" : L?.[key] != null ? f(L[key]) : "—");
-const LIAB_MONEY = ["last_statement_balance", "minimum_payment_amount", "last_payment_amount"];
+const LIAB_MONEY = ["last_statement_balance", "minimum_payment_amount", "last_payment_amount", "remaining_statement_balance"];
 function normLiability(L, cur) {
   if (!L) return L;
   const out = { ...L, na: [] };
@@ -100,7 +100,9 @@ function dueInfo(a) {
   if (!L?.next_payment_due_date) return null;   // 没有还款日（或问卷填了 N/A）
   const days = Math.ceil((new Date(L.next_payment_due_date + "T00:00:00") - new Date(new Date().toDateString())) / 864e5);
   const stmt = L.last_statement_balance ?? 0;
-  const pay = L.last_statement_issue_date ? paymentsSince(a, L.last_statement_issue_date) : { amount: 0, last: null, list: [] };
+  let pay = L.last_statement_issue_date ? paymentsSince(a, L.last_statement_issue_date) : { amount: 0, last: null, list: [] };
+  // 网银给了「月结单尚欠」（香港 Amex）：以它为准，还款交易还没推上来也能判断
+  if (L.remaining_statement_balance != null) pay = { ...pay, amount: Math.max(pay.amount, Math.round((stmt - L.remaining_statement_balance) * 100) / 100) };
   const need = Math.min(L.minimum_payment_amount ?? stmt, stmt);
   const nothing = stmt <= 0;
   const fullPaid = !nothing && pay.amount >= stmt - 0.005;

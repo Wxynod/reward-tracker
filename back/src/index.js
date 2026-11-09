@@ -231,6 +231,8 @@ const ROUTES = {
   // body: { item_id: "manual:<名字>", item?: { institution, region, notice }, accounts?: [...], liabilities?: { <account_id>: {...} },
   //         transactions?: [...], remove?: [<txn id>], overwrite?: false, replace_pending?: [<account_id>] }
   // replace_pending：这次带来的是这些账户「完整的」待入账列表，存着但不在列表里的待入账交易（已入账或被撤销）删掉
+  // balances：{ <account_id>: { balance_current, balance_available, limit, as_of } } 网银上的实时余额（总结欠 / 可用额度），优先于交易累计
+  // liabilities 按字段合并：只更新这次带来的字段，其余（如 APR）保留
   "POST /api/manual/import": async (env, body) => manualImport(env, body),
 
   "PUT /api/benefits": async (env, body) => {
@@ -447,7 +449,7 @@ async function verifyIngest(request, env) {
 // 当前欠款 = 已导入的全部交易之和（开卡时余额为 0；还款是负数）。额度扣掉欠款就是可用额度
 function manualBalances(accounts, txns) {
   for (const a of accounts) {
-    if (!a.balance_from_txns) continue;
+    if (!a.balance_from_txns || a.balance_as_of) continue; // 有网银快照时用快照（和 Amex 显示的一致）
     const bal = txns.filter((t) => t.account_id === a.id && !t.pending).reduce((s, t) => s + t.amount, 0);
     a.balance_current = round2(bal);
     a.balance_available = typeof a.limit === "number" ? round2(a.limit - bal) : null;
@@ -481,6 +483,7 @@ function cleanManualAccount(a) {
     currency,
     balance_from_txns: !!a.balance_from_txns,
     opened: dateOrNull(a.opened),
+    balance_as_of: str(a.balance_as_of, 40),
   };
 }
 
@@ -500,6 +503,8 @@ function cleanManualLiability(L) {
     aprs,
     statement_day: num(L.statement_day),
     due_day: numOrNA(L.due_day),
+    remaining_statement_balance: num(L.remaining_statement_balance), // 月结单还没还的部分（网银「尚欠」）
+    as_of: str(L.as_of, 40),
     source: str(L.source, 80),
   };
 }
@@ -557,10 +562,25 @@ async function manualImport(env, body) {
   let accounts = await getJSON(env, `accounts:${id}`, []);
   if (Array.isArray(body.accounts)) {
     const byId = new Map(accounts.map((a) => [a.id, a]));
-    for (const a of body.accounts.slice(0, 20)) { const c = cleanManualAccount(a); byId.set(c.id, c); }
+    for (const a of body.accounts.slice(0, 20)) {
+      const c = cleanManualAccount(a), old = byId.get(c.id);
+      // 重新导入结单时保留网银快照
+      if (old?.balance_as_of && !c.balance_as_of) Object.assign(c, { balance_current: old.balance_current, balance_available: old.balance_available, balance_as_of: old.balance_as_of });
+      byId.set(c.id, c);
+    }
     accounts = [...byId.values()];
   }
   const acctIds = new Set(accounts.map((a) => a.id));
+  if (body.balances && typeof body.balances === "object") {
+    for (const [aid, b] of Object.entries(body.balances)) {
+      const a = accounts.find((x) => x.id === aid);
+      if (!a || !b || typeof b !== "object") continue;
+      if (num(b.balance_current) != null) a.balance_current = b.balance_current;
+      if (num(b.balance_available) != null) a.balance_available = b.balance_available;
+      if (num(b.limit) != null) a.limit = b.limit;
+      a.balance_as_of = str(b.as_of, 40) || new Date().toISOString();
+    }
+  }
 
   // 账单信息：按账户覆盖
   const liab = await getJSON(env, `liab:${id}`, {});
@@ -568,7 +588,10 @@ async function manualImport(env, body) {
     for (const [aid, L] of Object.entries(body.liabilities)) {
       if (!acctIds.has(aid)) throw httpError(400, `账单信息里的账户 ${aid} 不存在`);
       const c = cleanManualLiability(L);
-      if (c) liab[aid] = c;
+      if (!c) continue;
+      const merged = { ...(liab[aid] || {}) };
+      for (const k of Object.keys(c)) if (Object.hasOwn(L, k)) merged[k] = c[k];
+      liab[aid] = merged;
     }
   }
 

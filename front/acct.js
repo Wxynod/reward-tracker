@@ -45,7 +45,7 @@
         <p>这张卡在香港发行，Plaid 连不上：历史交易来自 Amex 月结单（CSV），新交易在你打开 Amex 网银时由 Tampermonkey 脚本推送。这样会有以下影响：</p>
         <ul>
           <li><b>不会自动同步。</b>「同步」「立刻从银行刷新」对它没有作用；只有打开 Amex 网银的交易页面时才会更新。</li>
-          <li><b>当前欠款</b>是已导入的已入账交易的累计，待入账和还没推送的消费不在里面。</li>
+          <li><b>当前欠款、可用额度、还款日、最低还款</b>取自 Amex 网银首页（總結欠 / 可用信用額），打开网银时更新${a.balance_as_of ? `，最近一次是 ${esc(new Date(a.balance_as_of).toLocaleString("zh-CN"))}` : "；还没抓到过时，欠款按已导入交易累计"}。</li>
           <li><b>金额是港币。</b>按固定汇率 1 USD = 7.8 HKD 换算成美元参与汇总，和 Amex 实际入账汇率无关；港币原值显示在旁边。</li>
           <li><b>没有 MCC 和 Plaid 商户分类，</b>分类统计里大多归入「其他」；本站不估算这张卡的积分，季度加赏看 Amex HK Tracker。</li>
           <li><b>账单信息</b>由结单算出或来自问卷，问卷填 N/A 的项目显示「没有」。</li>
@@ -91,6 +91,7 @@
           ${L.aprs?.length ? `<table class="ad-apr"><thead><tr><th>APR</th><th>年利率</th><th>计息余额</th><th>本期利息</th></tr></thead><tbody>
             ${L.aprs.map((x) => `<tr><td>${esc(APR[x.type] || x.type)}</td><td>${x.na ? "没有" : x.pct != null ? `${(+x.pct).toFixed(2)}%` : "—"}</td><td>${x.balance != null ? fmt(x.balance) : "—"}</td><td>${x.interest != null ? fmt(x.interest) : "—"}</td></tr>`).join("")}
           </tbody></table>` : L.na?.includes("aprs") ? `<p class="hint">APR：没有</p>` : ""}
+          ${L.as_of ? `<p class="hint">账单数据来自 Amex 网银 · ${esc(new Date(L.as_of).toLocaleString("zh-CN"))}</p>` : ""}
         </section>`;
       } else {
         const st = it?.liab_status;
