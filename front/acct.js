@@ -42,10 +42,10 @@
     // 不走 Plaid 的账户：说明数据从哪来、有哪些影响
     const manual = isManual(a) ? `<section class="ad-sec ad-manual">
         <h4>${regionTag(a.region)}没有通过 Plaid 连接</h4>
-        <p>这张卡在香港发行，Plaid 连不上，交易来自 Amex 月结单（CSV）导入。这样会有以下影响：</p>
+        <p>这张卡在香港发行，Plaid 连不上：历史交易来自 Amex 月结单（CSV），新交易在你打开 Amex 网银时由 Tampermonkey 脚本推送。这样会有以下影响：</p>
         <ul>
-          <li><b>不会自动同步。</b>「同步」「立刻从银行刷新」对它没有作用；新交易要等下次导入（以后由 Amex 网页脚本读取）。</li>
-          <li><b>当前欠款</b>是已导入交易的累计，还没导入的新消费不在里面。</li>
+          <li><b>不会自动同步。</b>「同步」「立刻从银行刷新」对它没有作用；只有打开 Amex 网银的交易页面时才会更新。</li>
+          <li><b>当前欠款</b>是已导入的已入账交易的累计，待入账和还没推送的消费不在里面。</li>
           <li><b>金额是港币。</b>按固定汇率 1 USD = 7.8 HKD 换算成美元参与汇总，和 Amex 实际入账汇率无关；港币原值显示在旁边。</li>
           <li><b>没有 MCC 和 Plaid 商户分类，</b>分类统计里大多归入「其他」；本站不估算这张卡的积分，季度加赏看 Amex HK Tracker。</li>
           <li><b>账单信息</b>由结单算出或来自问卷，问卷填 N/A 的项目显示「没有」。</li>
@@ -70,7 +70,9 @@
       if (L) {
         const LO = L.orig || {};
         const hk = (k) => (LO[k] != null && a.orig_currency ? `<em class="orig">${esc(fmtOrig(LO[k], a.orig_currency))}</em>` : "");
-        const dueTxt = L.na?.includes("next_payment_due_date") ? "没有" : !due ? "—" : due.level === "overdue" ? "已逾期" : due.nothing ? "本期无需还款" : due.paid ? "本期已还" : due.days < 0 ? "已过还款日" : `剩 ${due.days} 天`;
+        const dueTxt = L.na?.includes("next_payment_due_date") ? "没有" : !due ? "—" : dueLabel(due);
+        const lp = due?.pay.last && !(L.last_payment_date && L.last_payment_date >= due.pay.last.date && L.last_payment_amount === due.pay.last.amount) ? due.pay.last : null;
+        const paidNow = due && !due.nothing && due.pay.amount > 0;
         bill = `<section class="ad-sec">
           <h4>账单与还款</h4>
           <div class="ad-bill ${due?.level || ""}">
@@ -82,8 +84,8 @@
             <div class="ad-grid4">
               <div><small>上期账单</small><b>${naVal(L, "last_statement_balance", (v) => fmt(v))}</b>${hk("last_statement_balance")}<em>${L.last_statement_issue_date ? `${md(L.last_statement_issue_date)} 出账` : ""}</em></div>
               <div><small>最低还款</small><b>${naVal(L, "minimum_payment_amount", (v) => fmt(v))}</b>${hk("minimum_payment_amount")}<em>&nbsp;</em></div>
-              <div><small>上次还款</small><b>${naVal(L, "last_payment_amount", (v) => fmt(v))}</b>${hk("last_payment_amount")}<em>${L.last_payment_date ? md(L.last_payment_date) : ""}</em></div>
-              <div><small>逾期</small><b class="${L.is_overdue ? "bad" : "good"}">${L.is_overdue == null ? "—" : L.is_overdue ? "是" : "否"}</b><em>&nbsp;</em></div>
+              <div><small>上次还款</small>${lp ? `<b>${fmt(lp.amount)}</b><em>${md(lp.date)}${lp.pending ? " · 处理中" : ""}</em>` : `<b>${naVal(L, "last_payment_amount", (v) => fmt(v))}</b>${hk("last_payment_amount")}<em>${L.last_payment_date ? md(L.last_payment_date) : ""}</em>`}</div>
+              ${paidNow ? `<div><small>本期已还</small><b class="good">${fmt(due.pay.amount)}</b><em>${due.fullPaid ? "已还清" : `余 ${fmt(due.remaining)}`}</em></div>` : `<div><small>逾期</small><b class="${L.is_overdue ? "bad" : "good"}">${L.is_overdue == null ? "—" : L.is_overdue ? "是" : "否"}</b><em>&nbsp;</em></div>`}
             </div>
           </div>
           ${L.aprs?.length ? `<table class="ad-apr"><thead><tr><th>APR</th><th>年利率</th><th>计息余额</th><th>本期利息</th></tr></thead><tbody>

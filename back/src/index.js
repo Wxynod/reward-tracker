@@ -229,7 +229,8 @@ const ROUTES = {
 
   // 不走 Plaid 的账户：脚本把账户 / 账单信息 / 交易推上来。交易按 id 去重：已存在的默认跳过（overwrite: true 才覆盖）。
   // body: { item_id: "manual:<名字>", item?: { institution, region, notice }, accounts?: [...], liabilities?: { <account_id>: {...} },
-  //         transactions?: [...], remove?: [<txn id>], overwrite?: false }
+  //         transactions?: [...], remove?: [<txn id>], overwrite?: false, replace_pending?: [<account_id>] }
+  // replace_pending：这次带来的是这些账户「完整的」待入账列表，存着但不在列表里的待入账交易（已入账或被撤销）删掉
   "POST /api/manual/import": async (env, body) => manualImport(env, body),
 
   "PUT /api/benefits": async (env, body) => {
@@ -580,12 +581,19 @@ async function manualImport(env, body) {
   for (const t of list) {
     const c = cleanManualTxn(t, acctIds);
     if (typeof c === "string") { rejected.push({ id: t?.id ?? null, reason: c }); continue; }
-    if (store[c.id] && !body.overwrite) { skipped++; continue; }
+    // 已存在的跳过；但待入账的可以被更新（金额 / 状态会变）
+    if (store[c.id] && !body.overwrite && !store[c.id].pending) { skipped++; continue; }
     if (store[c.id]) updated++; else added++;
     store[c.id] = c;
   }
   for (const rid of Array.isArray(body.remove) ? body.remove : []) {
     if (store[rid]) { delete store[rid]; removed++; }
+  }
+  if (Array.isArray(body.replace_pending)) {
+    const accts = new Set(body.replace_pending), incoming = new Set(list.map((t) => t?.id));
+    for (const [k, v] of Object.entries(store)) {
+      if (v.pending && accts.has(v.account_id) && !incoming.has(k)) { delete store[k]; removed++; }
+    }
   }
 
   const ids = await getJSON(env, "items", []);

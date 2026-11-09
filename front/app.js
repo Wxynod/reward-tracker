@@ -75,15 +75,47 @@ function closingDay(acctId) {
   return { day: 31, source: "default" };
 }
 // 还款状态：距离还款日几天、本期是否已还
+// 还款识别：Plaid 的 LOAN_PAYMENTS，或者名称像还款的转入（Barclays 等把还款记成 TRANSFER_IN；脚本导入的没有类别）；权益返现、年费退回不算
+const PAY_RE = /payment|autopay|auto[\s-]?pmt|pymt|thank\s*you/i;
+function isCardPayment(t) {
+  if (!(t.amount < 0) || R.isBenefitCredit(t) || R.isAnnualFee(t)) return false;
+  if (t.category === "LOAN_PAYMENTS") return true;
+  return (t.category === "TRANSFER_IN" || !t.category) && PAY_RE.test(`${t.name || ""} ${t.merchant || ""}`);
+}
+// 上期账单出账之后收到的还款：交易记录（及时，含 Pending）和 Liabilities 的 last_payment（可能滞后几天）取较大者
+function paymentsSince(a, since) {
+  const list = state.txns.filter((t) => t.account_id === a.id && t.date > since && isCardPayment(t))
+    .sort((x, y) => (x.date < y.date ? 1 : -1));
+  let amount = list.reduce((s, t) => s - t.amount, 0);
+  let last = list[0] ? { date: list[0].date, amount: -list[0].amount, pending: !!list[0].pending } : null;
+  const L = a.liability;
+  if (L?.last_payment_date && L.last_payment_date > since && (L.last_payment_amount ?? 0) > amount) {
+    amount = L.last_payment_amount;
+    last = { date: L.last_payment_date, amount: L.last_payment_amount, pending: false };
+  }
+  return { amount: Math.round(amount * 100) / 100, last, list };
+}
 function dueInfo(a) {
   const L = a?.liability;
   if (!L?.next_payment_due_date) return null;   // 没有还款日（或问卷填了 N/A）
   const days = Math.ceil((new Date(L.next_payment_due_date + "T00:00:00") - new Date(new Date().toDateString())) / 864e5);
-  const paid = !!(L.last_payment_date && L.last_statement_issue_date && L.last_payment_date > L.last_statement_issue_date &&
-    (L.last_payment_amount ?? 0) >= Math.min(L.minimum_payment_amount ?? 0, L.last_statement_balance ?? 0));
-  const nothing = (L.last_statement_balance ?? 0) <= 0;
-  const level = L.is_overdue ? "overdue" : paid || nothing ? "paid" : days <= 3 ? "urgent" : days <= 7 ? "soon" : "ok";
-  return { ...L, days, paid, nothing, level };
+  const stmt = L.last_statement_balance ?? 0;
+  const pay = L.last_statement_issue_date ? paymentsSince(a, L.last_statement_issue_date) : { amount: 0, last: null, list: [] };
+  const need = Math.min(L.minimum_payment_amount ?? stmt, stmt);
+  const nothing = stmt <= 0;
+  const fullPaid = !nothing && pay.amount >= stmt - 0.005;
+  const paid = !nothing && pay.amount > 0 && pay.amount >= need - 0.005;
+  const remaining = Math.max(0, Math.round((stmt - pay.amount) * 100) / 100);
+  const level = L.is_overdue && !paid ? "overdue" : paid || nothing ? "paid" : days <= 3 ? "urgent" : days <= 7 ? "soon" : "ok";
+  return { ...L, days, paid, fullPaid, nothing, remaining, pay, level };
+}
+// 还款状态短文案（账户详情、日历共用）
+function dueLabel(d, left = d.days) {
+  if (d.level === "overdue") return "已逾期";
+  if (d.nothing) return "本期无需还款";
+  if (d.fullPaid) return "已还清";
+  if (d.paid) return `已还最低 · 余 ${fmt(d.remaining)}`;
+  return left < 0 ? "已过还款日" : `剩 ${left} 天`;
 }
 // 在日期 ref（含）当天或之前最近的一次账单日；没设账单日时按自然月月底
 function lastClosing(acctId, ref) {
@@ -490,7 +522,7 @@ function renderAccounts() {
           <button class="btn small ghost" data-remove="${esc(it.item_id)}" data-name="${esc(it.institution)}">断开</button>`}
         </div>
       </div>
-      ${it.source === "manual" ? `<div class="manual-note">${HK_FLAG}<span><b>没有通过 Plaid 连接。</b>交易来自月结单导入，不会自动同步；港币按 1 USD = 7.8 HKD 换算成美元显示；没有 MCC，本站不估算积分。点开卡片看详情。</span></div>` : ""}
+      ${it.source === "manual" ? `<div class="manual-note">${HK_FLAG}<span><b>没有通过 Plaid 连接。</b>历史交易来自月结单，新交易在你打开 Amex 网银时由脚本推送；港币按 1 USD = 7.8 HKD 换算成美元显示；没有 MCC，本站不估算积分。点开卡片看详情。</span></div>` : ""}
       ${it.error ? `<div class="err">${esc(it.error.code)}：${esc(it.error.message)}</div>` : ""}
       ${it.accounts.map((a) => {
         const name = cardName(a);
@@ -953,7 +985,10 @@ function dueChip(a) {
   const d = dueInfo(a);
   if (!d) return "";
   const md = `${+d.next_payment_due_date.slice(5, 7)}/${+d.next_payment_due_date.slice(8)}`;
-  const txt = d.level === "overdue" ? "已逾期" : d.nothing ? `本期无需还款` : d.paid ? `本期已还 · 下次 ${md}` :
+  const pd = d.pay.last ? `${+d.pay.last.date.slice(5, 7)}/${+d.pay.last.date.slice(8)}` : "";
+  const txt = d.level === "overdue" ? "已逾期" : d.nothing ? `本期无需还款` :
+    d.fullPaid ? `已还清 ${fmt(d.pay.amount)}${pd ? ` · ${pd}` : ""}${d.pay.last?.pending ? " · 处理中" : ""}` :
+    d.paid ? `已还最低 · 余 ${fmt(d.remaining)} · ${md} 前` :
     d.days < 0 ? `还款日 ${md} 已过` : `${md} 还款 · 剩 ${d.days} 天${d.minimum_payment_amount != null ? ` · 最低 ${fmt(d.minimum_payment_amount)}` : ""}`;
   return `<span class="due-chip ${d.level}">${esc(txt)}</span>`;
 }

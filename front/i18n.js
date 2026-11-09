@@ -78,6 +78,7 @@
     "授权账单信息": "Authorize statement data", "还没有连接银行": "No banks linked yet",
     "授权后可自动获取账单日、还款日、最低还款和 APR": "Authorize to get closing day, due date, minimum payment and APR automatically",
     "这张卡没有固定额度（签账卡）或银行没有提供额度。": "This card has no preset limit (charge card) or the bank didn’t provide one.",
+    "已还清": "Paid in full", "已还最低": "Minimum paid", "处理中": "processing",
     "本期无需还款": "Nothing due", "本期已还": "Paid this cycle", "已过还款日": "Past due date", "已逾期": "Overdue",
     // 账户详情
     "当前欠款": "Current balance", "信用额度": "Credit limit", "可用额度": "Available credit", "可用余额": "Available", "当前余额": "Current balance",
@@ -166,14 +167,14 @@
     "非 Plaid": "Not via Plaid", "没有通过 Plaid 连接，交易由脚本导入": "Not linked via Plaid; transactions are imported by a script",
     "香港": "Hong Kong", "香港发行": "Issued in Hong Kong", "没有": "None", "上次导入": "Last imported",
     "没有通过 Plaid 连接。": "Not linked via Plaid.", "没有通过 Plaid 连接": "Not linked via Plaid",
-    "交易来自月结单导入，不会自动同步；港币按 1 USD = 7.8 HKD 换算成美元显示；没有 MCC，本站不估算积分。点开卡片看详情。":
-      "Transactions come from imported monthly statements and do not sync automatically. HKD is shown in USD at a fixed 1 USD = 7.8 HKD. No MCC, so points are not estimated here. Open a card for details.",
-    "这张卡在香港发行，Plaid 连不上，交易来自 Amex 月结单（CSV）导入。这样会有以下影响：":
-      "This card is issued in Hong Kong and Plaid can’t connect to it, so transactions are imported from Amex monthly statements (CSV). What this means:",
+    "历史交易来自月结单，新交易在你打开 Amex 网银时由脚本推送；港币按 1 USD = 7.8 HKD 换算成美元显示；没有 MCC，本站不估算积分。点开卡片看详情。":
+      "History comes from monthly statements; new transactions are pushed by a script when you open Amex online banking. HKD is shown in USD at a fixed 1 USD = 7.8 HKD. No MCC, so points are not estimated here. Open a card for details.",
+    "这张卡在香港发行，Plaid 连不上：历史交易来自 Amex 月结单（CSV），新交易在你打开 Amex 网银时由 Tampermonkey 脚本推送。这样会有以下影响：":
+      "This card is issued in Hong Kong and Plaid can’t connect to it: history comes from Amex monthly statements (CSV), and new transactions are pushed by a Tampermonkey script when you open Amex online banking. What this means:",
     "不会自动同步。": "No automatic sync.",
-    "「同步」「立刻从银行刷新」对它没有作用；新交易要等下次导入（以后由 Amex 网页脚本读取）。":
-      " “Sync” and “Refresh from bank now” don’t affect it; new transactions appear after the next import (later read by the Amex web script).",
-    "当前欠款": "Current balance", "是已导入交易的累计，还没导入的新消费不在里面。": " is the running total of imported transactions; purchases not yet imported are not included.",
+    "「同步」「立刻从银行刷新」对它没有作用；只有打开 Amex 网银的交易页面时才会更新。":
+      " “Sync” and “Refresh from bank now” don’t affect it; it only updates when you open the Amex online banking activity page.",
+    "当前欠款": "Current balance", "是已导入的已入账交易的累计，待入账和还没推送的消费不在里面。": " is the running total of imported posted transactions; pending and not-yet-pushed purchases are not included.",
     "金额是港币。": "Amounts are in HKD.",
     "按固定汇率 1 USD = 7.8 HKD 换算成美元参与汇总，和 Amex 实际入账汇率无关；港币原值显示在旁边。":
       " They are converted to USD at a fixed 1 USD = 7.8 HKD for totals, independent of Amex’s actual rates; the original HKD amount is shown alongside.",
@@ -281,6 +282,9 @@
     R("最近 (\\S+)", (_, d) => `last ${d}`),
     R("上次 (\\S+) 扣费", (_, d) => `last charged ${d}`),
     R("下次约", () => "next ≈"),
+    R("已还清 " + AMT, (_, a) => `Paid ${a} in full`),
+    R("余 " + AMT, (_, a) => `${a} left`),
+    R("(\\d+/\\d+) 前", (_, d) => `by ${d}`),
     R("还款日 (\\S+) 已过", (_, d) => `Due date ${d} has passed`),
     R("下次 (\\S+)", (_, d) => `next ${d}`),
     R("记得在 (\\S+) 前激活", (_, d) => `activate by ${d}`),
