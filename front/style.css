@@ -40,9 +40,10 @@ button, input, select { font: inherit; color: inherit; }
 .btn {
   border: 1px solid var(--line); background: var(--card);
   padding: 6px 16px; border-radius: 6px; cursor: pointer;
-  transition: border-color .15s, background .15s;
+  transition: border-color .15s, background .15s, transform .12s ease;
 }
 .btn:hover { border-color: var(--ink); }
+.btn:active:not(:disabled) { transform: scale(.96); }
 .btn.primary { background: var(--seal); border-color: var(--seal); color: #fff; }
 .btn.primary:hover { background: #8a2822; }
 .btn.ghost { background: transparent; }
@@ -50,16 +51,27 @@ button, input, select { font: inherit; color: inherit; }
 .btn:disabled { opacity: .5; cursor: wait; }
 
 /* ------------------------------------------------ tabs */
-.tabs { display: flex; gap: 28px; max-width: 920px; margin: 0 auto; padding: 0 20px; }
+.tabs { display: flex; gap: 28px; max-width: 920px; margin: 0 auto; padding: 0 20px; position: relative; }
 .tabs button {
   background: none; border: none; padding: 14px 0 10px; cursor: pointer;
   color: var(--muted); border-bottom: 2px solid transparent; font-size: 15px;
 }
+.tabs button { transition: color .2s ease; }
+.tabs button:hover { color: var(--ink); }
 .tabs button.active { color: var(--ink); border-bottom-color: var(--seal); font-weight: 600; }
+/* JS 就绪后改用滑动下划线 */
+.tabs .tab-ink {
+  position: absolute; left: 0; bottom: 0; height: 2px; width: 0; background: var(--seal); border-radius: 2px;
+  opacity: 0; pointer-events: none;
+  transition: transform .38s cubic-bezier(.22, 1, .36, 1), width .38s cubic-bezier(.22, 1, .36, 1);
+}
+.tabs .tab-ink.ready { opacity: 1; }
+.tabs:has(.tab-ink.ready) button.active { border-bottom-color: transparent; }
 
 main { max-width: 920px; margin: 0 auto; padding: 16px 20px 80px; }
 .tab { display: none; }
-.tab.active { display: block; }
+.tab.active { display: block; animation: tabIn .34s cubic-bezier(.22, 1, .36, 1); }
+@keyframes tabIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 
 /* ------------------------------------------------ summary + filters */
 .summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 16px; }
@@ -106,7 +118,7 @@ main { max-width: 920px; margin: 0 auto; padding: 16px 20px 80px; }
 .benefit-head h3 { margin: 0; font-size: 17px; }
 .benefit .meta { color: var(--muted); font-size: 12px; margin: 2px 0 10px; }
 .bar { height: 8px; background: var(--line); border-radius: 4px; overflow: hidden; }
-.bar > i { display: block; height: 100%; background: var(--seal); border-radius: 4px; transition: width .4s; }
+.bar > i { display: block; height: 100%; background: var(--seal); border-radius: 4px; transition: width .7s cubic-bezier(.22, 1, .36, 1), background-color .3s; }
 .benefit.done .bar > i { background: var(--jade); }
 .benefit .nums { display: flex; justify-content: space-between; font-size: 13px; margin-top: 6px; font-variant-numeric: tabular-nums; }
 .benefit .left { color: var(--seal); }
@@ -141,9 +153,13 @@ dialog h2 { margin: 0; font-size: 20px; }
 #toast {
   position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%) translateY(20px);
   background: var(--ink); color: var(--paper); padding: 8px 18px; border-radius: 6px;
-  opacity: 0; pointer-events: none; transition: all .25s; font-size: 14px; max-width: 90vw;
+  opacity: 0; pointer-events: none; font-size: 14px; max-width: 90vw;
+  transition: opacity .22s ease, transform .22s ease;
 }
-#toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+#toast.show {
+  opacity: 1; transform: translateX(-50%) translateY(0);
+  transition: opacity .28s ease, transform .42s cubic-bezier(.34, 1.4, .64, 1);
+}
 
 @media (max-width: 560px) {
   .masthead { padding-top: 20px; }
@@ -187,8 +203,27 @@ dialog h2 { margin: 0; font-size: 20px; }
   background: var(--card); border: 1px solid var(--line); border-top: 3px solid var(--seal);
   border-radius: var(--radius); box-shadow: 0 18px 40px rgba(31, 28, 24, .16);
   padding: 4px 18px 14px;
+  /* 收起状态：从顶部裁掉整块（左右下留出阴影空间），关闭时用这里的时长 */
+  clip-path: inset(0 -48px 100% -48px);
+  opacity: 0; transform: translateY(-8px);
+  transition: clip-path .26s cubic-bezier(.4, 0, .6, 1), opacity .22s ease .04s, transform .26s cubic-bezier(.4, 0, .6, 1);
+}
+.settings.open {
+  clip-path: inset(-12px -48px -64px -48px);
+  opacity: 1; transform: none;
+  transition: clip-path .46s cubic-bezier(.22, 1, .36, 1), opacity .2s ease, transform .46s cubic-bezier(.22, 1, .36, 1);
 }
 .settings section { padding: 14px 0; border-bottom: 1px dashed var(--line); }
+/* 里面的分区跟着依次落下 */
+.settings section { opacity: 0; transform: translateY(-6px); transition: opacity .15s ease, transform .2s ease; }
+.settings.open section { opacity: 1; transform: none; transition: opacity .3s ease, transform .4s cubic-bezier(.22, 1, .36, 1); }
+.settings.open section:nth-child(1) { transition-delay: .06s; }
+.settings.open section:nth-child(2) { transition-delay: .1s; }
+.settings.open section:nth-child(3) { transition-delay: .14s; }
+.settings.open section:nth-child(4) { transition-delay: .18s; }
+.settings.open section:nth-child(n+5) { transition-delay: .22s; }
+#btn-settings svg { transition: transform .5s cubic-bezier(.22, 1, .36, 1); }
+#btn-settings[aria-expanded="true"] svg { transform: rotate(90deg); }
 .settings section:last-child { border-bottom: none; }
 .settings h4 { margin: 0 0 4px; font-size: 14px; letter-spacing: .06em; }
 .settings .hint { margin-bottom: 10px; line-height: 1.55; }
@@ -839,9 +874,13 @@ html.d-lock, html.d-lock body { overflow: hidden; }
   position: absolute; left: 0; top: calc(100% + 6px); z-index: 50; min-width: 100%; width: max-content; max-width: min(360px, 90vw);
   max-height: 340px; overflow: auto; padding: 6px;
   background: var(--card); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 16px 36px rgba(31, 28, 24, .16);
-  opacity: 0; transform: translateY(-4px); pointer-events: none; transition: opacity .15s, transform .15s;
+  opacity: 0; transform: translateY(-6px) scaleY(.96); transform-origin: top center; pointer-events: none;
+  transition: opacity .14s ease, transform .16s ease;
 }
-.csel.open .csel-menu { opacity: 1; transform: none; pointer-events: auto; }
+.csel.open .csel-menu {
+  opacity: 1; transform: none; pointer-events: auto;
+  transition: opacity .2s ease, transform .3s cubic-bezier(.22, 1, .36, 1);
+}
 .csel-opt { display: flex; align-items: center; gap: 10px; padding: 6px 8px; border-radius: 7px; cursor: pointer; }
 .csel-opt:hover { background: var(--paper); }
 .csel-opt.on { background: color-mix(in srgb, var(--seal) 7%, var(--card)); }
@@ -935,7 +974,7 @@ html.d-lock, html.d-lock body { overflow: hidden; }
 .ad-face-btn.on { border-color: var(--seal); color: var(--seal); }
 
 .ad-chooser { display: none; background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 4px 14px 14px; margin-bottom: 12px; }
-.ad-chooser.open { display: block; animation: adIn .25s ease; }
+.ad-chooser.open { display: block; animation: adIn .34s cubic-bezier(.22, 1, .36, 1); }
 @keyframes adIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
 .ad-chooser .fp-grid { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); }
 .ad-chooser .cc-md { --w: 120px; }
@@ -1300,3 +1339,14 @@ html, body { overflow-x: clip; }
 .lang-seg button { padding: 4px 14px; font: inherit; font-size: 13px; }
 html[lang="en"] .brand .sub, html[lang="en"] .login-card .sub { display: none; }
 html[lang="en"] .brand h1, html[lang="en"] .login-card h1 { letter-spacing: .02em; }
+
+/* ================================================ motion polish */
+/* 弹窗关闭：比打开更快、用 ease-in，收得干脆 */
+#txn-detail:not(.open) .d-panel, #acct-detail:not(.open) .d-panel, #bill-cal:not(.open) .d-panel, #face-picker:not(.open) .fp-panel {
+  transition-duration: .2s; transition-timing-function: cubic-bezier(.4, 0, 1, 1);
+}
+#txn-detail:not(.open) .d-backdrop, #acct-detail:not(.open) .d-backdrop, #bill-cal:not(.open) .d-backdrop, #face-picker:not(.open) .d-backdrop { transition-duration: .2s; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; transition-delay: 0s !important; }
+}

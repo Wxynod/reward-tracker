@@ -815,11 +815,24 @@ async function resync() {
   finally { btn.disabled = false; btn.textContent = "重新拉取全部交易"; }
 }
 
+// 设置面板：先去掉 hidden 再加 .open，让 CSS 做"拉下"过渡；关闭时等过渡结束再隐藏
+let settingsTimer;
+const settingsOpen = () => $("#settings").classList.contains("open");
 function toggleSettings(open) {
   const panel = $("#settings"), btn = $("#btn-settings");
-  const show = open ?? panel.hidden;
-  panel.hidden = !show;
+  const show = open ?? !settingsOpen();
+  if (show === settingsOpen()) return;
+  clearTimeout(settingsTimer);
   btn.setAttribute("aria-expanded", String(show));
+  if (show) {
+    panel.hidden = false;
+    panel.scrollTop = 0;
+    void panel.offsetHeight; // 强制重排，保证过渡从收起状态开始
+    panel.classList.add("open");
+  } else {
+    panel.classList.remove("open");
+    settingsTimer = setTimeout(() => { if (!settingsOpen()) panel.hidden = true; }, 300);
+  }
 }
 
 function bindRewards() {
@@ -836,11 +849,11 @@ function bindRewards() {
   window.addEventListener("resize", updateScrollButtons);
   $("#btn-settings").addEventListener("click", (e) => { e.stopPropagation(); toggleSettings(); });
   document.addEventListener("click", (e) => {
-    if (!$("#settings").hidden && !e.target.closest(".settings-wrap")) toggleSettings(false);
+    if (settingsOpen() && !e.target.closest(".settings-wrap")) toggleSettings(false);
   });
   document.addEventListener("keydown", (e) => {
     if (e.key !== "Escape") return;
-    if (!$("#settings").hidden) toggleSettings(false);
+    if (settingsOpen()) toggleSettings(false);
     else if (state.editing) setEditing(false);
   });
   $("#btn-edit").addEventListener("click", () => { toggleSettings(false); state.editing ? saveEdit() : setEditing(true); });
@@ -957,6 +970,16 @@ function logout() {
   showLogin();
 }
 
+function placeTabInk(instant) {
+  const ink = $(".tabs .tab-ink"), b = $(".tabs button.active");
+  if (!ink || !b || !b.offsetWidth) return;
+  if (instant) ink.style.transition = "none";
+  ink.style.width = `${b.offsetWidth}px`;
+  ink.style.transform = `translateX(${b.offsetLeft}px)`;
+  ink.classList.add("ready");
+  if (instant) { void ink.offsetWidth; ink.style.transition = ""; }
+}
+
 let toastTimer;
 function toast(msg) {
   const el = $("#toast");
@@ -966,9 +989,18 @@ function toast(msg) {
 
 function bind() {
   $$(".tabs button").forEach((b) => b.addEventListener("click", () => {
+    if (b.classList.contains("active")) return;
     $$(".tabs button").forEach((x) => x.classList.toggle("active", x === b));
     $$(".tab").forEach((t) => t.classList.toggle("active", t.id === `tab-${b.dataset.tab}`));
+    placeTabInk();
   }));
+  // 标签下划线滑动：可见、换语言、窗口变化时都重新定位
+  const nav = $(".tabs");
+  nav.insertAdjacentHTML("beforeend", '<span class="tab-ink" aria-hidden="true"></span>');
+  if (window.ResizeObserver) {
+    const ro = new ResizeObserver(() => placeTabInk(true));
+    ro.observe(nav); $$(".tabs button").forEach((b) => ro.observe(b));
+  } else window.addEventListener("resize", () => placeTabInk(true));
   $("#btn-sync").addEventListener("click", sync);
   $("#btn-link").addEventListener("click", () => connect());
   $("#btn-logout").addEventListener("click", logout);
