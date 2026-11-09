@@ -275,6 +275,8 @@ dialog h2 { margin: 0; font-size: 20px; }
   position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain;
   background: #fff; padding: 6%;
 }
+.ilogo-hsbc { width: 32px; height: 32px; }
+.ilogo-hsbc img { padding: 0; object-fit: cover; }
 .with-logo { display: flex; align-items: center; }
 
 .section-title { font-size: 15px; letter-spacing: .08em; margin: 26px 0 10px; }

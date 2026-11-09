@@ -635,11 +635,11 @@ const fmtBal = (v, prog) => R.fmtEarned(v, R.PROGRAMS[prog].unit) + unitWord(pro
 
 // logo：优先用 Plaid 返回的机构 logo，其次银行官网 favicon，最后是品牌色字母徽章
 function logoSources(issuer, domain) {
-  const hit = Object.entries(state.logos).find(([name, v]) => R.issuerOf(name) === issuer && v.logo);
+  const hit = state.logos[issuer]?.logo || Object.entries(state.logos).find(([name, v]) => R.issuerOf(name) === issuer && v.logo)?.[1].logo;
   const list = [];
   const bf = domain && B.domainUrl(domain, 128);   // Brandfetch 高清图标优先
   if (bf) list.push(bf);
-  if (hit) list.push(`data:image/png;base64,${hit[1].logo}`);
+  if (hit) list.push(`data:image/png;base64,${hit}`);
   if (domain) list.push(`https://www.google.com/s2/favicons?domain=${domain}&sz=256`);
   return list;
 }
@@ -668,7 +668,12 @@ function instLogo(institution) {
   const issuer = R.issuerOf(institution);
   const prog = Object.values(R.PROGRAMS).find((p) => p.issuer === issuer);
   const color = state.logos[institution]?.color || prog?.color;
-  return logoHTML(issuer || institution, prog?.domain, color, String(institution || "?")[0], "ilogo");
+  let domain = prog?.domain;
+  if (/\bschwab\b/i.test(institution)) domain = "schwab.com";
+  if (/\bhsbc\b|汇丰|滙豐|匯豐/i.test(institution)) {
+    return '<span class="ilogo ilogo-hsbc"><img src="hsbc-logo.png" alt=""></span>';
+  }
+  return logoHTML(issuer || institution, domain, color, String(institution || "?")[0], "ilogo");
 }
 
 function earnCell(t) {
