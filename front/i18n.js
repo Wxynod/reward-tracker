@@ -162,6 +162,30 @@
     // 星期
     "一": "M", "二": "T", "三": "W", "四": "T", "五": "F", "六": "S", "日": "S",
     "周一": "Mon", "周二": "Tue", "周三": "Wed", "周四": "Thu", "周五": "Fri", "周六": "Sat", "周日": "Sun",
+    // 非 Plaid 账户（香港 Amex）
+    "非 Plaid": "Not via Plaid", "没有通过 Plaid 连接，交易由脚本导入": "Not linked via Plaid; transactions are imported by a script",
+    "香港": "Hong Kong", "香港发行": "Issued in Hong Kong", "没有": "None", "上次导入": "Last imported",
+    "没有通过 Plaid 连接。": "Not linked via Plaid.", "没有通过 Plaid 连接": "Not linked via Plaid",
+    "交易来自月结单导入，不会自动同步；港币按 1 USD = 7.8 HKD 换算成美元显示；没有 MCC，本站不估算积分。点开卡片看详情。":
+      "Transactions come from imported monthly statements and do not sync automatically. HKD is shown in USD at a fixed 1 USD = 7.8 HKD. No MCC, so points are not estimated here. Open a card for details.",
+    "这张卡在香港发行，Plaid 连不上，交易来自 Amex 月结单（CSV）导入。这样会有以下影响：":
+      "This card is issued in Hong Kong and Plaid can’t connect to it, so transactions are imported from Amex monthly statements (CSV). What this means:",
+    "不会自动同步。": "No automatic sync.",
+    "「同步」「立刻从银行刷新」对它没有作用；新交易要等下次导入（以后由 Amex 网页脚本读取）。":
+      " “Sync” and “Refresh from bank now” don’t affect it; new transactions appear after the next import (later read by the Amex web script).",
+    "当前欠款": "Current balance", "是已导入交易的累计，还没导入的新消费不在里面。": " is the running total of imported transactions; purchases not yet imported are not included.",
+    "金额是港币。": "Amounts are in HKD.",
+    "按固定汇率 1 USD = 7.8 HKD 换算成美元参与汇总，和 Amex 实际入账汇率无关；港币原值显示在旁边。":
+      " They are converted to USD at a fixed 1 USD = 7.8 HKD for totals, independent of Amex’s actual rates; the original HKD amount is shown alongside.",
+    "没有 MCC 和 Plaid 商户分类，": "No MCC or Plaid merchant categories, ",
+    "分类统计里大多归入「其他」；本站不估算这张卡的积分，季度加赏看 Amex HK Tracker。":
+      "so most spending falls under “Other”; points for this card are not estimated here — see Amex HK Tracker for quarterly bonuses.",
+    "账单信息": "Statement details", "由结单算出或来自问卷，问卷填 N/A 的项目显示「没有」。": " are computed from statements or taken from the questionnaire; items answered N/A show “None”.",
+    "还没有账单信息。运行导入脚本（scripts/import_amex_hk.mjs）后会显示。": "No statement details yet. They appear after running the import script (scripts/import_amex_hk.mjs).",
+    "APR：没有": "APR: None", "数据来源": "Data source", "月结单导入（不经 Plaid）": "Imported statements (not via Plaid)",
+    "香港卡：本站不估算积分，季度加赏看 Amex HK Tracker": "Hong Kong card: points not estimated here — see Amex HK Tracker for quarterly bonuses",
+    "外币原始金额": "Original foreign amount", "优惠": "Offer", "所属结单": "Statement", "Amex 参考号": "Amex reference",
+    "结单不提供": "Not in statement", "香港卡 · 见 Amex HK Tracker": "HK card · see Amex HK Tracker", "不估算积分": "Points not estimated", "香港结单不提供 MCC": "Hong Kong statements don’t include MCC", "经典": "classic",
   };
 
   // ---------------------------------------------------------------- 词组（拆段后仍有中文时按最长优先替换）
@@ -261,6 +285,9 @@
     R("下次 (\\S+)", (_, d) => `next ${d}`),
     R("记得在 (\\S+) 前激活", (_, d) => `activate by ${d}`),
     R("上次同步：(.+)", (_, d) => `Last synced: ${d}`),
+    R("上次导入：(.+)", (_, d) => `Last imported: ${d}`),
+    R("按 1 USD = ([\\d.]+) (\\w+) 换算成美元显示", (_, r, c) => `shown in USD at 1 USD = ${r} ${c}`),
+    R("汇率 ([\\d.]+)", (_, r) => `rate ${r}`),
     R("自动 · 来自上期出账日 (\\S+)", (_, d) => `Auto · from last closing ${d}`),
     R("留空 = 自动（来自上期出账日 (\\S+)）", (_, d) => `Empty = auto (from last closing ${d})`),
     R("留空 = 月底", () => "Empty = month-end"),

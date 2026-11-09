@@ -8,3 +8,6 @@ back/.wrangler/
 cards/
 cardlib_build/
 back/cardlib.json
+
+# 香港 Amex 结单原件（CSV）和问卷：含消费明细与卡号尾数，只留在本机
+amex_hk_statements/

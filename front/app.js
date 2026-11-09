@@ -16,6 +16,50 @@ window.brandFail = (img) => {
 };
 const EMPTY_REWARDS = () => ({ cards: {}, rules: {}, balances: {}, closing: {}, cardface: {} });
 
+// ---------------------------------------------------------------- 非美元账户（香港 Amex，港币）
+// 按固定汇率换算成美元：汇总、分析、积分都用美元金额；港币原值留在 orig_amount / orig 里给界面显示
+const FX_PER_USD = { HKD: 7.8 };
+const toUSD = (v, cur) => (typeof v === "number" && FX_PER_USD[cur] ? Math.round((v / FX_PER_USD[cur]) * 100) / 100 : v);
+const fmtOrig = (v, cur) => (cur === "HKD"
+  ? `${v < 0 ? "−" : ""}HK$${Math.abs(v).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  : fmt(v, cur));
+const isManual = (a) => a?.source === "manual";
+// 问卷里填 N/A 的账单字段：值换成 null（其余代码按「未知」处理），键名记在 L.na 里，界面显示「没有」
+const naVal = (L, key, f) => (L?.na?.includes(key) ? "没有" : L?.[key] != null ? f(L[key]) : "—");
+const LIAB_MONEY = ["last_statement_balance", "minimum_payment_amount", "last_payment_amount"];
+function normLiability(L, cur) {
+  if (!L) return L;
+  const out = { ...L, na: [] };
+  for (const [k, v] of Object.entries(L)) if (v === "N/A") { out[k] = null; out.na.push(k); }
+  if (L.aprs === "N/A") { out.aprs = []; out.na.push("aprs"); }
+  else if (Array.isArray(L.aprs)) out.aprs = L.aprs.map((x) => (x.pct === "N/A" ? { ...x, pct: null, na: true } : x));
+  if (FX_PER_USD[cur]) {
+    out.orig = {};
+    for (const k of LIAB_MONEY) { out.orig[k] = out[k]; out[k] = toUSD(out[k], cur); }
+  }
+  return out;
+}
+function normAccount(a, it) {
+  const cur = a.currency;
+  const base = { ...a, source: it.source || "plaid", region: it.region || null, liability: normLiability(a.liability, cur) };
+  if (!FX_PER_USD[cur]) return base;
+  return {
+    ...base, currency: "USD", orig_currency: cur,
+    orig: { balance_current: a.balance_current, balance_available: a.balance_available, limit: a.limit },
+    balance_current: toUSD(a.balance_current, cur), balance_available: toUSD(a.balance_available, cur), limit: toUSD(a.limit, cur),
+  };
+}
+const normTxn = (t) => (FX_PER_USD[t.currency]
+  ? { ...t, amount: toUSD(t.amount, t.currency), currency: "USD", orig_amount: t.amount, orig_currency: t.currency }
+  : t);
+// 港币原值的小字（没有换算过的账户返回空）
+const origLine = (a, key, cls = "meta orig") =>
+  a?.orig_currency && typeof a.orig?.[key] === "number" ? `<div class="${cls}">${esc(fmtOrig(a.orig[key], a.orig_currency))}</div>` : "";
+// 香港区旗（Windows 不显示国旗 emoji，所以用 SVG 画）
+const HK_FLAG = `<svg class="flag" viewBox="0 0 30 20" role="img" aria-label="香港"><rect width="30" height="20" rx="2.5" fill="#de2910"/><g fill="#fff" transform="translate(15 10)">${
+  [0, 72, 144, 216, 288].map((r) => `<path transform="rotate(${r}) translate(0 -1)" d="M0 0C-3.6-1.4-4.6-4.6-3-7.4c.4 1.8 1.6 2.6 2.7 3C-1.6-5.6-.8-7.6.9-8.3-.5-6.4 1.6-2.4 0 0Z"/>`).join("")}</g></svg>`;
+const regionTag = (region) => (region === "HK" ? `<span class="region" title="香港发行">${HK_FLAG}</span>` : "");
+
 // ---------------------------------------------------------------- 账单周期
 // 账单日 day（1–31）在某个月的实际日期：小月取月底
 const closingIn = (y, m, day) => {
@@ -33,7 +77,7 @@ function closingDay(acctId) {
 // 还款状态：距离还款日几天、本期是否已还
 function dueInfo(a) {
   const L = a?.liability;
-  if (!L?.next_payment_due_date) return null;
+  if (!L?.next_payment_due_date) return null;   // 没有还款日（或问卷填了 N/A）
   const days = Math.ceil((new Date(L.next_payment_due_date + "T00:00:00") - new Date(new Date().toDateString())) / 864e5);
   const paid = !!(L.last_payment_date && L.last_statement_issue_date && L.last_payment_date > L.last_statement_issue_date &&
     (L.last_payment_amount ?? 0) >= Math.min(L.minimum_payment_amount ?? 0, L.last_statement_balance ?? 0));
@@ -90,11 +134,14 @@ async function api(path, { method = "GET", body } = {}) {
 function ingest(data) {
   state.env = data.env;
   state.items = data.items;
-  state.txns = data.transactions;
+  state.txns = data.transactions.map(normTxn);
   state.benefits = data.benefits || [];
   state.rewards = { ...EMPTY_REWARDS(), ...(data.rewards || {}) };
   state.accounts = {};
-  for (const it of data.items) for (const a of it.accounts) state.accounts[a.id] = { ...a, institution: it.institution };
+  for (const it of data.items) {
+    it.accounts = it.accounts.map((a) => normAccount(a, it));
+    for (const a of it.accounts) state.accounts[a.id] = { ...a, institution: it.institution };
+  }
   render();
 }
 
@@ -295,6 +342,7 @@ function txnRow(t) {
     </div>
     <div class="right">
       <div class="amt ${t.amount < 0 ? "in" : ""}">${amt}</div>
+      ${t.orig_currency ? `<div class="amt-orig">${esc(fmtOrig(t.orig_amount, t.orig_currency))}</div>` : ""}
       ${earnCell(t)}
     </div>
   </div>`;
@@ -432,15 +480,17 @@ function renderAccounts() {
   }
   if (!state.items.length) { $("#account-list").innerHTML = `<div class="empty">还没有连接银行</div>`; return; }
   $("#account-list").innerHTML = state.items.map((it) => `
-    <div class="card">
+    <div class="card${it.source === "manual" ? " manual" : ""}">
       <div class="inst-head">
-        <h3 class="with-logo">${instLogo(it.institution)}<span class="inst-name">${esc(it.institution)}</span></h3>
+        <h3 class="with-logo">${instLogo(it.institution)}<span class="inst-name">${esc(it.institution)}</span>${regionTag(it.region)}</h3>
         <div class="inst-actions">
+          ${it.source === "manual" ? `<span class="src-tag" title="没有通过 Plaid 连接，交易由脚本导入">非 Plaid</span>` : `
           ${it.error ? `<button class="btn small primary" data-relink="${esc(it.item_id)}">重新连接</button>` : ""}
           ${!it.error && it.liab_status === "consent_required" ? `<button class="btn small" data-liab="${esc(it.item_id)}" title="授权后可自动获取账单日、还款日、最低还款和 APR">授权账单信息</button>` : ""}
-          <button class="btn small ghost" data-remove="${esc(it.item_id)}" data-name="${esc(it.institution)}">断开</button>
+          <button class="btn small ghost" data-remove="${esc(it.item_id)}" data-name="${esc(it.institution)}">断开</button>`}
         </div>
       </div>
+      ${it.source === "manual" ? `<div class="manual-note">${HK_FLAG}<span><b>没有通过 Plaid 连接。</b>交易来自月结单导入，不会自动同步；港币按 1 USD = 7.8 HKD 换算成美元显示；没有 MCC，本站不估算积分。点开卡片看详情。</span></div>` : ""}
       ${it.error ? `<div class="err">${esc(it.error.code)}：${esc(it.error.message)}</div>` : ""}
       ${it.accounts.map((a) => {
         const name = cardName(a);
@@ -451,12 +501,13 @@ function renderAccounts() {
           <div class="acct-info"><div class="acct-name">${esc(name)}${a.mask ? ` <span class="mask">··${esc(a.mask)}</span>` : ""}</div><div class="meta">${esc(sub)}</div>${dueChip(state.accounts[a.id] || a)}</div>
           <div class="acct-amt">
             <div>${a.balance_current != null ? fmt(a.balance_current, a.currency) : "—"}</div>
-            <div class="meta">${a.limit ? "额度 " + fmt(a.limit, a.currency) : ""}</div>
+            ${origLine(a, "balance_current")}
+            <div class="meta">${a.limit ? "额度 " + fmt(a.limit, a.currency) : ""}${a.orig_currency && typeof a.orig?.limit === "number" ? `<span class="orig"> · ${esc(fmtOrig(a.orig.limit, a.orig_currency))}</span>` : ""}</div>
           </div>
           ${a.type === "credit" && a.limit ? limitBar(a) : ""}
         </div>`;
       }).join("")}
-      <div class="hint" style="margin-top:8px">上次同步：${it.last_synced ? new Date(it.last_synced).toLocaleString("zh-CN") : "尚未同步"}</div>
+      <div class="hint" style="margin-top:8px">${it.source === "manual" ? "上次导入" : "上次同步"}：${it.last_synced ? new Date(it.last_synced).toLocaleString("zh-CN") : "尚未同步"}</div>
     </div>`).join("");
 }
 
@@ -560,7 +611,7 @@ function renderRewards() {
   const cards = {};
   for (const a of creditAccounts()) {
     const pk = productOf(a);
-    if (!pk) continue;
+    if (!pk || R.PRODUCTS[pk].noEarn) continue;   // 香港卡：积分不在本站估算
     const prog = R.PRODUCTS[pk].program;
     progs[prog] = progs[prog] || { month: 0, posted: 0, pending: 0, next: null };
     const nc = nextClosing(a.id, today());

@@ -1350,3 +1350,27 @@ html[lang="en"] .brand h1, html[lang="en"] .login-card h1 { letter-spacing: .02e
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; transition-delay: 0s !important; }
 }
+
+/* ------------------------------------------------ 非 Plaid 账户（香港 Amex）：区旗、说明、港币原值 */
+.flag { width: 21px; height: 14px; flex: none; display: inline-block; vertical-align: -2px;
+  border-radius: 2.5px; box-shadow: 0 0 0 .5px rgba(0,0,0,.18); }
+.region { display: inline-flex; align-items: center; margin-left: 8px; flex: none; }
+.ad-id p .region, .ad-sec h4 .region { margin: 0 6px 0 0; }
+.src-tag { font-size: 11px; letter-spacing: .06em; padding: 1px 8px; border-radius: 3px;
+  color: var(--seal); border: 1px solid rgba(163,49,42,.45); white-space: nowrap; }
+.manual-note { display: flex; gap: 10px; align-items: flex-start; margin: 2px 0 10px; padding: 9px 12px;
+  font-size: 12.5px; line-height: 1.65; color: #6b4a22; background: #fbf3e4; border: 1px solid #eedcbc; border-radius: 10px; }
+.manual-note .flag { margin-top: 3px; }
+.manual-note b { color: var(--ink); font-weight: 600; }
+.ad-manual { background: #fbf3e4; border-color: #eedcbc; }
+.ad-manual h4 { display: flex; align-items: center; color: #6b4a22; }
+.ad-manual p { margin: 0 0 6px; font-size: 13px; }
+.ad-manual ul { margin: 0; padding-left: 18px; font-size: 12.5px; line-height: 1.7; color: #5a4a35; }
+.ad-manual li + li { margin-top: 2px; }
+.ad-manual li b { color: var(--ink); font-weight: 600; }
+.acct-amt .orig, .acct-amt .meta.orig { color: var(--muted); font-size: 11.5px; font-variant-numeric: tabular-nums; }
+.ad-stats .orig { display: block; font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.ad-grid4 em.orig { display: block; }
+.txn .amt-orig { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; line-height: 1.2; }
+.d-amt .d-orig { display: block; font-style: normal; font-size: 13px; font-weight: 400; color: var(--muted); }
+@media (max-width: 640px) { .d-amt .d-orig { display: inline; margin-left: 8px; } }

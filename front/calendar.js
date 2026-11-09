@@ -136,8 +136,8 @@
       const d = e.info;
       if (d) {
         body = `<div class="ag-nums">
-          <span><small>账单金额</small><b>${d.last_statement_balance != null ? fmt(d.last_statement_balance) : "—"}</b></span>
-          <span><small>最低还款</small><b>${d.minimum_payment_amount != null ? fmt(d.minimum_payment_amount) : "—"}</b></span>
+          <span><small>账单金额</small><b>${naVal(d, "last_statement_balance", (v) => fmt(v))}</b></span>
+          <span><small>最低还款</small><b>${naVal(d, "minimum_payment_amount", (v) => fmt(v))}</b></span>
         </div>
         <span class="due-chip ${d.level}">${d.level === "overdue" ? "已逾期" : d.nothing ? "本期无需还款" : d.paid ? "本期已还" : left < 0 ? "已过还款日" : `剩 ${left} 天`}</span>`;
       } else {

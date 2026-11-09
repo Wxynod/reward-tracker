@@ -2,6 +2,8 @@
 // 作用：代理 Plaid API（secret 只存在这里），把 access_token / 交易 / 权益规则存进 KV。
 // 登录：POST /api/login 校验 APP_USERNAME / APP_PASSWORD，返回签名会话令牌；
 // 其余请求都要带 Authorization: Bearer <会话令牌>。
+// 不走 Plaid 的账户（例如香港 Amex）：POST /api/manual/import 写入，item 记为 source: "manual"，同步时跳过 Plaid。
+// 可选：Worker secret INGEST_TOKEN 设置后，脚本可以只凭这个令牌调用写入接口（不能读数据）。
 
 const PLAID_HOSTS = {
   sandbox: "https://sandbox.plaid.com",
@@ -20,8 +22,11 @@ export default {
     const url = new URL(request.url);
     try {
       if (request.method === "POST" && url.pathname === "/api/login") return await login(request, env, cors);
-      if (!(await verifySession(request, env))) return json({ error: "请先登录" }, 401, cors);
-      const handler = ROUTES[`${request.method} ${url.pathname}`];
+      const route = `${request.method} ${url.pathname}`;
+      if (!(await verifySession(request, env)) && !(INGEST_ROUTES.has(route) && (await verifyIngest(request, env)))) {
+        return json({ error: "请先登录" }, 401, cors);
+      }
+      const handler = ROUTES[route];
       if (!handler) return json({ error: "not found" }, 404, cors);
       const body = ["POST", "PUT"].includes(request.method)
         ? await request.json().catch(() => ({}))
@@ -99,7 +104,7 @@ const ROUTES = {
   "POST /api/items/remove": async (env, body) => {
     const id = body.item_id;
     const item = await getItem(env, id);
-    await plaid(env, "/item/remove", { access_token: item.access_token }).catch(() => {});
+    if (!isManual(item)) await plaid(env, "/item/remove", { access_token: item.access_token }).catch(() => {});
     await Promise.all([
       env.DB.delete(`item:${id}`),
       env.DB.delete(`txns:${id}`),
@@ -118,6 +123,7 @@ const ROUTES = {
     const results = [];
     for (const id of ids) {
       const item = await getItem(env, id);
+      if (isManual(item)) continue; // 手动导入的账户没有 Plaid 连接
       try {
         await plaid(env, "/transactions/refresh", { access_token: item.access_token });
         results.push({ institution: item.institution, ok: true });
@@ -221,6 +227,11 @@ const ROUTES = {
     return { ok: true };
   },
 
+  // 不走 Plaid 的账户：脚本把账户 / 账单信息 / 交易推上来。交易按 id 去重：已存在的默认跳过（overwrite: true 才覆盖）。
+  // body: { item_id: "manual:<名字>", item?: { institution, region, notice }, accounts?: [...], liabilities?: { <account_id>: {...} },
+  //         transactions?: [...], remove?: [<txn id>], overwrite?: false }
+  "POST /api/manual/import": async (env, body) => manualImport(env, body),
+
   "PUT /api/benefits": async (env, body) => {
     if (!Array.isArray(body.benefits)) throw httpError(400, "benefits must be an array");
     await putJSON(env, "benefits", body.benefits);
@@ -232,6 +243,7 @@ const ROUTES = {
 
 async function syncItem(env, itemId, { full = false } = {}) {
   const item = await getItem(env, itemId);
+  if (isManual(item)) return; // 手动导入的账户只能由 /api/manual/import 更新
   if (full) item.cursor = null;
   let result;
   // 分页期间数据变动时，Plaid 要求从本轮起始 cursor 重来
@@ -334,12 +346,16 @@ async function loadAll(env) {
     ]);
     for (const a of accounts) if (liab[a.id]) a.liability = liab[a.id];
     if (!item) continue;
+    if (isManual(item)) manualBalances(accounts, Object.values(txns));
     items.push({
       item_id: id,
       institution: item.institution,
+      source: item.source || "plaid",
+      region: item.region || null,
+      notice: item.notice || null,
       last_synced: item.last_synced,
       error: item.error,
-      liab_status: item.liab_status || null,
+      liab_status: isManual(item) ? (Object.keys(liab).length ? "manual" : "none") : item.liab_status || null,
       accounts,
     });
     transactions = transactions.concat(Object.values(txns));
@@ -415,6 +431,174 @@ const slimAccount = (a) => ({
   limit: a.balances?.limit ?? null,
   currency: a.balances?.iso_currency_code || "USD",
 });
+
+// ---------------------------------------------------------------- 手动导入（不走 Plaid）
+
+const INGEST_ROUTES = new Set(["POST /api/manual/import"]);
+const isManual = (item) => item?.source === "manual";
+
+async function verifyIngest(request, env) {
+  if (!env.INGEST_TOKEN) return false;
+  const h = request.headers.get("Authorization") || "";
+  return h.startsWith("Bearer ") && safeEqual(h.slice(7), env.INGEST_TOKEN);
+}
+
+// 当前欠款 = 已导入的全部交易之和（开卡时余额为 0；还款是负数）。额度扣掉欠款就是可用额度
+function manualBalances(accounts, txns) {
+  for (const a of accounts) {
+    if (!a.balance_from_txns) continue;
+    const bal = txns.filter((t) => t.account_id === a.id && !t.pending).reduce((s, t) => s + t.amount, 0);
+    a.balance_current = round2(bal);
+    a.balance_available = typeof a.limit === "number" ? round2(a.limit - bal) : null;
+  }
+}
+const round2 = (n) => Math.round(n * 100) / 100;
+
+const str = (v, max = 200) => (v == null ? null : String(v).slice(0, max));
+const num = (v) => (typeof v === "number" && Number.isFinite(v) ? v : null);
+// 问卷里的「N/A」原样保留（前端显示为「没有」）；空着的是 null（显示为「—」）
+const numOrNA = (v) => (v === "N/A" ? "N/A" : num(v));
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const dateOrNull = (v) => (typeof v === "string" && DATE_RE.test(v) ? v : null);
+
+function cleanManualAccount(a) {
+  if (!a || typeof a !== "object") throw httpError(400, "account 必须是对象");
+  const id = str(a.id, 64);
+  if (!id || !/^[A-Za-z0-9_:-]+$/.test(id)) throw httpError(400, `account id 不合法：${a.id}`);
+  const currency = str(a.currency, 3) || "USD";
+  if (!/^[A-Z]{3}$/.test(currency)) throw httpError(400, `币种不合法：${a.currency}`);
+  return {
+    id,
+    name: str(a.name) || id,
+    official_name: str(a.official_name),
+    mask: str(a.mask, 8),
+    type: ["credit", "depository", "investment", "loan"].includes(a.type) ? a.type : "credit",
+    subtype: str(a.subtype, 40),
+    balance_current: num(a.balance_current),
+    balance_available: num(a.balance_available),
+    limit: num(a.limit),
+    currency,
+    balance_from_txns: !!a.balance_from_txns,
+    opened: dateOrNull(a.opened),
+  };
+}
+
+function cleanManualLiability(L) {
+  if (!L || typeof L !== "object") return null;
+  const aprs = L.aprs === "N/A" ? "N/A" : Array.isArray(L.aprs)
+    ? L.aprs.slice(0, 6).map((x) => ({ type: str(x?.type, 40), pct: numOrNA(x?.pct), balance: null, interest: null })).filter((x) => x.type)
+    : [];
+  return {
+    last_statement_balance: num(L.last_statement_balance),
+    last_statement_issue_date: dateOrNull(L.last_statement_issue_date),
+    minimum_payment_amount: numOrNA(L.minimum_payment_amount),
+    next_payment_due_date: L.next_payment_due_date === "N/A" ? "N/A" : dateOrNull(L.next_payment_due_date),
+    last_payment_amount: num(L.last_payment_amount),
+    last_payment_date: dateOrNull(L.last_payment_date),
+    is_overdue: typeof L.is_overdue === "boolean" ? L.is_overdue : null,
+    aprs,
+    statement_day: num(L.statement_day),
+    due_day: numOrNA(L.due_day),
+    source: str(L.source, 80),
+  };
+}
+
+function cleanManualTxn(t, acctIds) {
+  if (!t || typeof t !== "object") return "不是对象";
+  const id = str(t.id, 80);
+  if (!id) return "缺少 id";
+  if (!acctIds.has(t.account_id)) return `账户 ${t.account_id} 不存在`;
+  if (!dateOrNull(t.date)) return `日期不合法：${t.date}`;
+  if (num(t.amount) == null) return `金额不合法：${t.amount}`;
+  const currency = str(t.currency, 3) || "USD";
+  if (!/^[A-Z]{3}$/.test(currency)) return `币种不合法：${t.currency}`;
+  const detail = t.detail && typeof t.detail === "object" ? t.detail : {};
+  if (JSON.stringify(detail).length > 4000) return "detail 太大";
+  return {
+    id,
+    account_id: t.account_id,
+    date: t.date,
+    authorized_date: dateOrNull(t.authorized_date),
+    name: str(t.name) || "",
+    merchant: str(t.merchant),
+    amount: t.amount, // 和 Plaid 一致：正数 = 支出，负数 = 退款 / 还款
+    currency,
+    category: str(t.category, 60),
+    category_detail: str(t.category_detail, 80),
+    mcc: str(t.mcc, 4),
+    channel: str(t.channel, 20),
+    website: str(t.website),
+    detail,
+    pending: !!t.pending,
+    logo: null,
+    source: str(t.source, 40),
+  };
+}
+
+async function manualImport(env, body) {
+  const id = String(body.item_id || "");
+  if (!/^manual:[a-z0-9_-]{1,40}$/.test(id)) throw httpError(400, "item_id 必须形如 manual:<小写名字>");
+  const prev = await getJSON(env, `item:${id}`, null);
+  if (prev && !isManual(prev)) throw httpError(409, "这个 item_id 已被 Plaid 连接占用");
+  if (!prev && !body.item) throw httpError(400, "首次导入需要提供 item（机构名等）");
+  const now = new Date().toISOString();
+  const meta = body.item || {};
+  const item = {
+    ...(prev || { added_at: now, cursor: null, error: null }),
+    source: "manual",
+    institution: str(meta.institution) || prev?.institution || "Manual",
+    region: str(meta.region, 8) ?? prev?.region ?? null,
+    notice: str(meta.notice, 600) ?? prev?.notice ?? null,
+    last_synced: now,
+  };
+
+  // 账户：按 id 覆盖，没提到的账户保留
+  let accounts = await getJSON(env, `accounts:${id}`, []);
+  if (Array.isArray(body.accounts)) {
+    const byId = new Map(accounts.map((a) => [a.id, a]));
+    for (const a of body.accounts.slice(0, 20)) { const c = cleanManualAccount(a); byId.set(c.id, c); }
+    accounts = [...byId.values()];
+  }
+  const acctIds = new Set(accounts.map((a) => a.id));
+
+  // 账单信息：按账户覆盖
+  const liab = await getJSON(env, `liab:${id}`, {});
+  if (body.liabilities && typeof body.liabilities === "object") {
+    for (const [aid, L] of Object.entries(body.liabilities)) {
+      if (!acctIds.has(aid)) throw httpError(400, `账单信息里的账户 ${aid} 不存在`);
+      const c = cleanManualLiability(L);
+      if (c) liab[aid] = c;
+    }
+  }
+
+  // 交易：已有的跳过（或 overwrite 时覆盖）；remove 用来删掉被正式入账取代的待入账交易
+  const list = Array.isArray(body.transactions) ? body.transactions : [];
+  if (list.length > 5000) throw httpError(413, "一次最多 5000 笔交易");
+  const store = await getJSON(env, `txns:${id}`, {});
+  let added = 0, skipped = 0, updated = 0, removed = 0;
+  const rejected = [];
+  for (const t of list) {
+    const c = cleanManualTxn(t, acctIds);
+    if (typeof c === "string") { rejected.push({ id: t?.id ?? null, reason: c }); continue; }
+    if (store[c.id] && !body.overwrite) { skipped++; continue; }
+    if (store[c.id]) updated++; else added++;
+    store[c.id] = c;
+  }
+  for (const rid of Array.isArray(body.remove) ? body.remove : []) {
+    if (store[rid]) { delete store[rid]; removed++; }
+  }
+
+  const ids = await getJSON(env, "items", []);
+  if (!ids.includes(id)) ids.push(id);
+  await Promise.all([
+    putJSON(env, `item:${id}`, item),
+    putJSON(env, `accounts:${id}`, accounts),
+    putJSON(env, `liab:${id}`, liab),
+    putJSON(env, `txns:${id}`, store),
+    putJSON(env, "items", ids),
+  ]);
+  return { ok: true, item_id: id, added, skipped, updated, removed, rejected, total: Object.keys(store).length };
+}
 
 // ---------------------------------------------------------------- helpers
 

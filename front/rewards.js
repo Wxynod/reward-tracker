@@ -12,6 +12,7 @@
     amex_cash:  { name: "Reward Dollars",     short: "$",   issuer: "American Express", domain: "americanexpress.com",  color: "#016FD0", unit: "cash" },
     barclays:   { name: "Cash Back",          short: "$",   issuer: "Barclays",         domain: "barclays.com",         color: "#00AEEF", unit: "cash" },
     marriott:   { name: "Marriott Bonvoy",    short: "MB",  issuer: "Marriott",         domain: "marriott.com",         color: "#B04A2F", unit: "pts" },
+    amex_mr_hk: { name: "Membership Rewards HK", short: "MR", issuer: "American Express", domain: "americanexpress.com", color: "#016FD0", unit: "pts" },
     apple_cash: { name: "Daily Cash",         short: "$",   issuer: "Apple",            domain: "apple.com",            color: "#1D1D1F", unit: "cash" },
   };
 
@@ -139,6 +140,11 @@
         { cats: ["marriott"], rate: 6 },
         { cats: ["dining", "flights"], rate: 3 },   // 机票限直接向航司订
       ] },
+    // 香港发行（region: "HK"）：港币计价、没有 MCC，本站不估算积分（noEarn）；季度加赏由 Amex HK Tracker 脚本追踪
+    amex_hk_plat: { name: "HK Platinum Card", issuer: "American Express", program: "amex_mr_hk", region: "HK", match: /platinum/i, base: 1,
+      noEarn: true, note: "香港卡：本站不估算积分，季度加赏看 Amex HK Tracker", rules: [] },
+    amex_hk_explorer: { name: "HK Explorer Card", issuer: "American Express", program: "amex_mr_hk", region: "HK", match: /explorer/i, base: 1,
+      noEarn: true, note: "香港卡：本站不估算积分，季度加赏看 Amex HK Tracker", rules: [] },
     amex_plat: { name: "Platinum Card", issuer: "American Express", program: "amex_mr", match: /platinum/i, base: 1,
       portal: /amex\s*travel|amextravel|american\s*express\s*travel/i, rules: [
         { cats: ["flights"], rate: 5, cap: 500000, period: "year" },
@@ -212,10 +218,12 @@
     const issuer = issuerOf(account.institution);
     if (!issuer) return null;
     const text = `${account.name || ""} ${account.official_name || ""}`;
+    const region = account.region || "US";   // 香港卡只匹配香港产品，美国卡只匹配美国产品
     for (const [key, p] of Object.entries(PRODUCTS)) {
+      if ((p.region || "US") !== region) continue;
       if (p.issuer === issuer && p.match && p.match.test(text)) return key;
     }
-    return ISSUER_FALLBACK[issuer] || null;
+    return region === "US" ? ISSUER_FALLBACK[issuer] || null : null;
   }
 
   function mccCat(mcc) {
@@ -270,7 +278,7 @@
       const a = accounts[acctId];
       const pKey = Object.hasOwn(cards, acctId) ? cards[acctId] : guessProduct(a);
       const product = PRODUCTS[pKey];
-      if (!product) continue;
+      if (!product || product.noEarn) continue;
       const unit = PROGRAMS[product.program].unit;
       const acctRules = learned[acctId] || {};
       list.sort((x, y) => (x.date < y.date ? -1 : x.date > y.date ? 1 : 0));

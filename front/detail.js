@@ -79,7 +79,7 @@
             <span class="ttag cat" style="--tc:${ic.color}">${esc(ic.label)}</span>
           </div>
         </div>
-        <div class="d-amt ${t.amount < 0 ? "in" : ""}">${amt}<small>${esc(t.currency || "USD")}</small></div>
+        <div class="d-amt ${t.amount < 0 ? "in" : ""}">${amt}<small>${esc(t.currency || "USD")}</small>${t.orig_currency ? `<em class="d-orig">${esc(fmtOrig(t.orig_amount, t.orig_currency))}</em>` : ""}</div>
       </header>`;
 
     // 积分 + 卡片横条
@@ -87,7 +87,9 @@
         <div class="d-card">${a ? RT_CARDS.face(a, "sm") : ""}<div><b>${esc(cardNameMask(a) || "未知账户")}</b><small>${esc(a?.institution || "")}</small></div></div>
         ${e && e.cat !== "none" && e.earned
           ? `<div class="d-earn" style="--brand:${prog.color}"><b>${e.earned > 0 ? "+" : ""}${esc(R.fmtEarned(e.earned, prog.unit))}${prog.unit === "cash" ? "" : " " + esc(prog.short)}</b><small>${esc(R.fmtRate(e.rate, prog.unit))} · ${esc(e.source)}</small></div>`
-          : `<div class="d-earn none"><b>不计积分</b><small>${esc(e?.source || "非信用卡消费")}</small></div>`}
+          : a && R.PRODUCTS[productOf(a)]?.noEarn
+            ? `<div class="d-earn none"><b>不估算积分</b><small>香港卡 · 见 Amex HK Tracker</small></div>`
+            : `<div class="d-earn none"><b>不计积分</b><small>${esc(e?.source || "非信用卡消费")}</small></div>`}
       </div>`;
 
     // 时间线：授权 → 入账
@@ -105,20 +107,24 @@
       row("交易类型", d.transaction_type ? `${esc(TYPE[d.transaction_type] || d.transaction_type)} <small>${esc(d.transaction_type)}</small>` : ""),
       row("交易代码", d.transaction_code ? esc(d.transaction_code) : ""),
       row("支票号", d.check_number ? esc(d.check_number) : ""),
-      row("币种", esc(t.currency || "USD") + (d.unofficial_currency_code ? ` <small>非官方 ${esc(d.unofficial_currency_code)}</small>` : "")),
+      row("币种", t.orig_currency ? `${esc(t.orig_currency)} <small>按 1 USD = ${FX_PER_USD[t.orig_currency]} ${esc(t.orig_currency)} 换算成美元显示</small>` : esc(t.currency || "USD") + (d.unofficial_currency_code ? ` <small>非官方 ${esc(d.unofficial_currency_code)}</small>` : "")),
       row("持卡人", d.account_owner ? esc(d.account_owner) : ""),
     ].join(""));
 
     const secMerchant = section("商户", [
-      row("商户名", t.merchant ? esc(t.merchant) : "<small>Plaid 未识别</small>"),
+      row("商户名", t.merchant ? esc(t.merchant) : t.source === "amex_hk_statement" ? "<small>结单不提供</small>" : "<small>Plaid 未识别</small>"),
       row("银行原始描述", esc(d.original_description || t.name)),
+      row("外币原始金额", d.foreign ? `${esc(d.foreign.amount)} ${esc(d.foreign.currency)} <small>汇率 ${esc(d.foreign.rate)}</small>` : ""),
+      row("优惠", d.offer ? esc(d.offer) : ""),
+      row("所属结单", d.statement_date ? `${esc(dateZh(d.statement_date))} 出账` : ""),
+      row("Amex 参考号", d.reference ? `<code>${esc(d.reference)}</code>` : "", { mono: true }),
       row("网站", t.website ? `<a href="${esc(/^https?:/.test(t.website) ? t.website : "https://" + t.website)}" target="_blank" rel="noopener">${esc(t.website.replace(/^https?:\/\//, ""))} ↗</a>` : ""),
       row("地址", addr ? `${esc(addr)}${loc.store_number ? ` <small>门店 #${esc(loc.store_number)}</small>` : ""}<br><a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapQ)}" target="_blank" rel="noopener">在地图中查看 ↗</a>` : ""),
       row("Plaid 商户 ID", d.merchant_entity_id ? `<code>${esc(d.merchant_entity_id)}</code>` : "", { mono: true }),
     ].join(""));
 
     const secCat = section("分类", [
-      row("MCC", t.mcc ? `<span class="mcc">${esc(t.mcc)}</span> ${esc(mccName(t.mcc) || "")}` : "<small>银行没有提供（Plaid 的 MCC 仍是 beta 字段）</small>"),
+      row("MCC", t.mcc ? `<span class="mcc">${esc(t.mcc)}</span> ${esc(mccName(t.mcc) || "")}` : t.source === "amex_hk_statement" ? "<small>香港结单不提供 MCC</small>" : "<small>银行没有提供（Plaid 的 MCC 仍是 beta 字段）</small>"),
       row("本站类别", `<span class="dot" style="background:${ic.color}"></span>${esc(ic.label)}`),
       row("Plaid 大类", pfc.primary ? `${esc(PFC_ZH[pfc.primary] || pretty(pfc.primary))} <small>${esc(pfc.primary)}</small>` : (t.category ? esc(t.category) : "")),
       row("Plaid 细类", pfc.detailed ? `${esc(pretty(pfc.detailed.replace(pfc.primary + "_", "")))} <small>${esc(pfc.detailed)}</small>` : ""),
