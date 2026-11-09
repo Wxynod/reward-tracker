@@ -123,7 +123,7 @@
       row("交易类型", d.transaction_type ? `${esc(TYPE[d.transaction_type] || d.transaction_type)} <small>${esc(d.transaction_type)}</small>` : ""),
       row("交易代码", d.transaction_code ? esc(d.transaction_code) : ""),
       row("支票号", d.check_number ? esc(d.check_number) : ""),
-      row("币种", t.orig_currency ? `${esc(t.orig_currency)} <small>按 1 USD = ${FX_PER_USD[t.orig_currency]} ${esc(t.orig_currency)} 换算成美元显示</small>` : esc(t.currency || "USD") + (d.unofficial_currency_code ? ` <small>非官方 ${esc(d.unofficial_currency_code)}</small>` : "")),
+      row("币种", t.orig_currency ? `${esc(t.orig_currency)} <small>${esc(fxDescription(t))}</small>` : esc(t.currency || "USD") + (d.unofficial_currency_code ? ` <small>非官方 ${esc(d.unofficial_currency_code)}</small>` : "")),
       row("持卡人", d.account_owner ? esc(d.account_owner) : ""),
     ].join(""));
 

@@ -60,8 +60,8 @@
       // 年费：历史扣费记录（真实）+ 下一次（按上次日期推算）
       const fee = feeInfo(a);
       if (fee) {
-        for (const h of fee.history) if (h.date >= from && h.date <= to) out.push({ date: h.date, kind: "fee", a, est: false, info: { amount: h.amount, fee } });
-        if (fee.next >= from && fee.next <= to) out.push({ date: fee.next, kind: "fee", a, est: true, info: { amount: fee.amount, fee } });
+        for (const h of fee.history) if (h.date >= from && h.date <= to) out.push({ date: h.date, kind: "fee", a, est: false, info: { amount: h.amount, txn: h, fee } });
+        if (fee.next >= from && fee.next <= to) out.push({ date: fee.next, kind: "fee", a, est: true, info: { amount: fee.amount, txn: fee.last, fee } });
       }
       // 当期真实还款日（来自 Liabilities）
       if (L?.next_payment_due_date && L.next_payment_due_date >= from && L.next_payment_due_date <= to) {
@@ -81,11 +81,11 @@
     for (const t of state.txns) {
       if (t.account_id !== a.id || t.date <= last) continue;
       const e = state.earn.get(t.id);
-      if (e && e.cat === "none") continue;
-      spend += t.amount;
+      if (e?.cat === "none" || (a.fx && isCardPayment(t))) continue;
+      spend += t.orig_amount ?? t.amount;
       if (e) { pts += e.earned; prog = R.PROGRAMS[e.program]; unit = prog.unit; }
     }
-    return { spend, pts, unit, prog };
+    return { spendText: a.orig_currency ? fmtOrig(spend, a.orig_currency) : fmt(spend), pts, unit, prog };
   }
 
   // ------------------------------------------------------------ 渲染
@@ -123,21 +123,21 @@
     let body = "";
     if (e.kind === "fee") {
       const f = e.info.fee;
-      body = `<div class="ag-nums"><span><small>${e.est ? "预计年费" : "已扣年费"}</small><b>${esc(moneyText(e.info.amount, a))}</b></span>${e.est ? `<span><small>上次扣费</small><b>${md(f.last.date)}</b></span>` : ""}</div>
+      body = `<div class="ag-nums"><span><small>${e.est ? "预计年费" : "已扣年费"}</small><b>${esc(moneyText(e.info.amount, e.info.txn))}</b></span>${e.est ? `<span><small>上次扣费</small><b>${md(f.last.date)}</b></span>` : ""}</div>
         <p class="ag-note">${e.est ? (left >= 0 && left <= 45 ? "快到年费日了：可以评估权益是否值、问问保留优惠或降级" : "按上次扣费日推算，以账单为准") : esc(f.last.name)}</p>`;
     } else if (e.kind === "close") {
       const isNext = e.date > lastClosing(a.id, t0) && e.date >= t0 && e.date === nextCloseOf(a);
       if (isNext) {
         const s = cycleStats(a);
-        body = `<div class="ag-nums"><span><small>本期已刷</small><b>${esc(moneyText(s.spend, a))}</b></span>${s.prog ? `<span><small>Pending 积分</small><b style="color:${s.prog.color}">+${esc(R.fmtEarned(s.pts, s.unit))}${s.unit === "cash" ? "" : " " + esc(s.prog.short)}</b></span>` : ""}</div>`;
+        body = `<div class="ag-nums"><span><small>本期已刷</small><b>${esc(s.spendText)}</b></span>${s.prog ? `<span><small>Pending 积分</small><b style="color:${s.prog.color}">+${esc(R.fmtEarned(s.pts, s.unit))}${s.unit === "cash" ? "" : " " + esc(s.prog.short)}</b></span>` : ""}</div>`;
       }
       body += `<p class="ag-note">${e.info.source === "manual" ? "账单日为手动设置" : e.info.source === "auto" ? "账单日来自上期出账日" : "未知账单日，暂按月底"}</p>`;
     } else {
       const d = e.info;
       if (d) {
         body = `<div class="ag-nums">
-          <span><small>账单金额</small><b>${naVal(d, "last_statement_balance", (v) => esc(moneyText(v, a)))}</b></span>
-          <span><small>最低还款</small><b>${naVal(d, "minimum_payment_amount", (v) => esc(moneyText(v, a)))}</b></span>
+          <span><small>账单金额</small><b>${naVal(d, "last_statement_balance", (v) => esc(moneyText(v, d)))}</b></span>
+          <span><small>最低还款</small><b>${naVal(d, "minimum_payment_amount", (v) => esc(moneyText(v, d)))}</b></span>
         </div>
         <span class="due-chip ${d.level}">${esc(dueLabel(d, left))}</span>`;
       } else {
@@ -184,8 +184,8 @@
     const nf = events(t0, addDays(t0, 120)).find((e) => e.kind === "fee");
     return `<div class="cal-sum">
       ${nc ? `<span><i class="dot close"></i>下个出账 <b>${esc(cardName(nc.a))}</b> ${md(nc.date)}</span>` : ""}
-      ${nf ? `<span><i class="dot fee"></i>下个年费 <b>${esc(cardName(nf.a))}</b> ${md(nf.date)} · ${esc(moneyText(nf.info.amount, nf.a))}</span>` : ""}
-      ${nd ? `<span><i class="dot due"></i>下个还款 <b>${esc(cardName(nd.a))}</b> ${md(nd.date)}${nd.info?.minimum_payment_amount != null ? ` · 最低 ${esc(moneyText(nd.info.minimum_payment_amount, nd.a))}` : ""}</span>` : ""}
+      ${nf ? `<span><i class="dot fee"></i>下个年费 <b>${esc(cardName(nf.a))}</b> ${md(nf.date)} · ${esc(moneyText(nf.info.amount, nf.info.txn))}</span>` : ""}
+      ${nd ? `<span><i class="dot due"></i>下个还款 <b>${esc(cardName(nd.a))}</b> ${md(nd.date)}${nd.info?.minimum_payment_amount != null ? ` · 最低 ${esc(moneyText(nd.info.minimum_payment_amount, nd.info))}` : ""}</span>` : ""}
     </div>`;
   }
 
@@ -205,9 +205,9 @@
           <span class="up-x">${extra || "&nbsp;"}</span>
         </button>`
       : `<div class="up-tile ${kind} none"><span class="up-k"><i class="dot ${kind}"></i>${label}</span><span class="up-none">近期没有</span></div>`;
-    const dueX = nd?.info?.minimum_payment_amount != null ? `最低 <b>${esc(moneyText(nd.info.minimum_payment_amount, nd.a))}</b>` : "";
-    const closeX = nc ? `本期已刷 <b>${esc(moneyText(cycleStats(nc.a).spend, nc.a))}</b>` : "";
-    const feeX = nf ? `${nf.est ? "约" : ""} <b>${esc(moneyText(nf.info.amount, nf.a))}</b>` : "";
+    const dueX = nd?.info?.minimum_payment_amount != null ? `最低 <b>${esc(moneyText(nd.info.minimum_payment_amount, nd.info))}</b>` : "";
+    const closeX = nc ? `本期已刷 <b>${esc(cycleStats(nc.a).spendText)}</b>` : "";
+    const feeX = nf ? `${nf.est ? "约" : ""} <b>${esc(moneyText(nf.info.amount, nf.info.txn))}</b>` : "";
     return `<div class="up-tiles">${tile(nd, "due", "下个还款", dueX)}${tile(nc, "close", "下个出账", closeX)}${tile(nf, "fee", "下个年费", feeX)}</div>`;
   }
 

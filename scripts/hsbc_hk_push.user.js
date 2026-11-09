@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         HSBC HK → 记账本 · 信用卡交易推送
 // @namespace    local.hsbc-hk-ledger-push
-// @version      1.0.0
+// @version      1.1.0
 // @description  在汇丰香港网银里读取各张信用卡的已入账交易，推送到记账本（Reward Tracker）Worker。每张卡记住上次同步到的日期，下次从那天开始；待入账交易不推。
 // @match        https://www.hsbc.com.hk/*
 // @run-at       document-start
@@ -29,6 +29,7 @@
 // 7. 类别：先按规则（还款 / 返现 / 年费），再按商户名查对照表（来自 hsbc_hk_statements/merchant_categories.csv），
 //    查不到用 MCC 兜底，都不行就是 Unclassified。MCC 也一并存进记账本。
 //
+// Pulse 人民币交易保留 CNY 原额，Worker 在导入时查 ECB 日参考汇率并保存美元金额，成功后才推进同步起点。
 // 首次使用：Tampermonkey 菜单 →「记账本：设置写入令牌」，填 Worker 的 INGEST_TOKEN。
 
 (() => {
@@ -188,7 +189,10 @@
       const cur = x.transactionAmount?.currencyCode;
       const abs = Number(x.transactionAmount?.amount);
       if (!x.transactionDate || !Number.isFinite(abs)) continue;
-      if (cur && cur !== currency) { console.warn('[记账本] 币种和账户不一致，跳过', x); continue; }
+      if (cur && cur !== currency) {
+        if (acctId === 'hsbc_pulse_cny') throw new Error('Pulse 人民币交易币种不符，请核对后重试');
+        console.warn('[记账本] 币种和账户不一致，跳过', x); continue;
+      }
       const credit = /CREDIT/i.test(x.transactionCreditDebitCode || '');
       const amount = Math.round((credit ? -abs : abs) * 100) / 100;
       const desc = (x.transactionDescriptions || []).join('  ');
@@ -240,15 +244,22 @@
         .filter((a) => a.accountIdentifier?.normalisedProductCategoryCode === 'CC' && a.accountHistoryApplicable !== false)
         .map((a) => ({
           a, id: PRODUCTS[a.accountIdentifier.productCategoryCode] || LAST4[String(a.accountDisplay || '').replace(/\D/g, '').slice(-4)],
-          currency: a.ledgerBalance?.currency || 'HKD',
+          currency: a.ledgerBalance?.currency,
         }))
         .filter((c) => c.id);
+      for (const c of cards) {
+        if (c.id === 'hsbc_pulse_cny' && c.currency && c.currency !== 'CNY')
+          throw new Error('Pulse 人民币账户币种不符，请核对账户后重试');
+        c.currency ||= c.id === 'hsbc_pulse_cny' ? 'CNY' : 'HKD';
+      }
       if (!cards.length) throw new Error('账户列表里没找到要同步的信用卡');
 
       // 同步起点：Tampermonkey 存储 → 记账本里最后一笔交易 → 2021-01-01
       const wm = getWM();
-      if (cards.some((c) => !wm[c.id])) {
+      const hasPulse = cards.some(c => c.id === 'hsbc_pulse_cny');
+      if (hasPulse || cards.some(c => !wm[c.id])) {
         const st = await ledger('/api/manual/state', { item_id: ITEM_ID });
+        if (hasPulse && !st.pulse_cny_fx) throw new Error('请先部署支持 Pulse 人民币汇率的记账本 Worker');
         for (const c of cards) if (!wm[c.id]) wm[c.id] = st.accounts?.[c.id]?.last_date || FIRST_DATE;
         setWM(wm);
       }
@@ -286,14 +297,14 @@
         item_id: ITEM_ID, item: { institution: 'HSBC HK', region: 'HK' },
         transactions: all, dedupe: 'date_amount',
       });
+      if (d.rejected?.length) throw new Error(`${d.rejected.length} 笔交易被拒，同步起点已保留：${d.rejected[0].reason}`);
       const wm2 = getWM();
       for (const [id, p] of Object.entries(plan)) wm2[id] = p.next;
       setWM(wm2);
       GM_setValue(KEY + 'last', { at: Date.now(), plan, result: { added: d.added, skipped: d.skipped, rejected: d.rejected?.length || 0, total: d.total } });
 
       const per = Object.entries(plan).filter(([, p]) => p.n || p.pending).map(([id, p]) => `${NAMES[id]} ${p.n}${p.pending ? `（另有 ${p.pending} 笔待入账未推）` : ''}`).join('、');
-      const rej = d.rejected?.length ? `，${d.rejected.length} 笔被拒` : '';
-      if (d.added || rej) toast(`记账本：新增 ${d.added} 笔，已存在跳过 ${d.skipped} 笔${rej}。${per ? `读取：${per}` : ''}`, rej ? 'warn' : 'good', 8000);
+      if (d.added) toast(`记账本：新增 ${d.added} 笔，已存在跳过 ${d.skipped} 笔。${per ? `读取：${per}` : ''}`, 'good', 8000);
       else toast(`记账本：没有新交易（读取 ${all.length} 笔都已存在）`, 'quiet');
     } catch (e) {
       console.error('[记账本]', e);

@@ -47,7 +47,7 @@
         <ul>
           <li><b>不会自动同步。</b>「同步」「立刻从银行刷新」对它没有作用；新结单出来后，用导入脚本（scripts/import_hsbc_hk.py）再导入一次。</li>
           <li><b>当前欠款</b>是期初结余加上已导入的全部交易，截至最近一期结单；之后的新消费不在里面。</li>
-          <li><b>金额以${curName}显示。</b>美元小字和各种汇总按固定汇率 ${a.orig_currency ? fxNote(a.orig_currency) : ""} 换算，和汇丰实际入账汇率无关。</li>
+          <li><b>金额以${curName}显示。</b>${a.fx ? "消费按交易日参考汇率折算，未偿欠款按加权成本折算，余额快照按快照日折算。" : `美元小字和各种汇总按固定汇率 ${a.orig_currency ? fxNote(a.orig_currency) : ""} 换算，和汇丰实际入账汇率无关。`}</li>
           ${/^hsbc_pulse/.test(a.id) ? `<li><b>Pulse 是双币卡：</b>港币、人民币两个子账户分开出账、分开还款，所以这里是两个账户。</li>` : ""}
           <li><b>结单没有 MCC，</b>类别按商户名归入汇丰的日常交易分类；本站不估算汇丰积分（RewardCash / 里数）。</li>
           <li><b>账单信息</b>（还款日、最低还款、APR）取自最近一期结单。</li>
@@ -65,10 +65,10 @@
       </section>` : "";
 
     // 余额
-    const avail = a.balance_available != null ? a.balance_available : a.limit ? a.limit - (a.balance_current || 0) : null;
+    const avail = a.balance_available != null ? a.balance_available : a.limit ? a.limit - (a.fx ? toUSD(a.orig.balance_current || 0, a.fx.rate) : a.balance_current || 0) : null;
     const bal = `<section class="ad-sec">
         <div class="ad-stats">
-          <div><small>${isCredit ? "当前欠款" : "当前余额"}</small><b>${a.balance_current != null ? esc(moneyText(a.balance_current, a)) : "—"}</b>${usdLine(a, a.balance_current, "orig")}</div>
+          <div><small>${isCredit ? "当前欠款" : "当前余额"}</small><b>${a.balance_current != null ? esc(balanceText(a)) : "—"}</b>${usdLine(a, a.balance_current, "orig")}</div>
           ${isCredit ? `<div><small>信用额度</small><b>${a.limit ? esc(moneyText(a.limit, a, true)) : "—"}</b>${a.limit ? usdLine(a, a.limit, "orig") : ""}</div>` : ""}
           <div><small>可用${isCredit ? "额度" : "余额"}</small><b>${avail != null ? esc(moneyText(avail, a, true)) : "—"}</b>${usdLine(a, avail, "orig")}</div>
         </div>
@@ -80,10 +80,11 @@
     let bill = "";
     if (isCredit) {
       if (L) {
-        const m = (v) => esc(moneyText(v, a));
+        const m = (v) => esc(a.fx ? fmtOrig(v, a.orig_currency) : moneyText(v, a));
+        const billValues = a.fx ? { ...L, ...L.orig } : L;
         const hk = (k) => (a.orig_currency && typeof L[k] === "number" ? `<em class="orig">${esc(fmt(L[k]))}</em>` : "");   // 港卡：美元小字
         const dueTxt = L.na?.includes("next_payment_due_date") ? "没有" : !due ? "—" : dueLabel(due);
-        const lp = due?.pay.last && !(L.last_payment_date && L.last_payment_date >= due.pay.last.date && L.last_payment_amount === due.pay.last.amount) ? due.pay.last : null;
+        const lp = due?.pay.last && !(L.last_payment_date && L.last_payment_date >= due.pay.last.date && billValues.last_payment_amount === due.pay.last.amount) ? due.pay.last : null;
         const paidNow = due && !due.nothing && due.pay.amount > 0;
         bill = `<section class="ad-sec">
           <h4>账单与还款</h4>
@@ -94,9 +95,9 @@
               <span class="due-chip ${due?.level || ""}">${esc(dueTxt)}</span>
             </div>
             <div class="ad-grid4">
-              <div><small>上期账单</small><b>${naVal(L, "last_statement_balance", m)}</b>${hk("last_statement_balance")}<em>${L.last_statement_issue_date ? `${md(L.last_statement_issue_date)} 出账` : ""}</em></div>
-              <div><small>最低还款</small><b>${naVal(L, "minimum_payment_amount", m)}</b>${hk("minimum_payment_amount")}<em>&nbsp;</em></div>
-              <div><small>上次还款</small>${lp ? `<b>${m(lp.amount)}</b><em>${md(lp.date)}${lp.pending ? " · 处理中" : ""}</em>` : `<b>${naVal(L, "last_payment_amount", m)}</b>${hk("last_payment_amount")}<em>${L.last_payment_date ? md(L.last_payment_date) : ""}</em>`}</div>
+              <div><small>上期账单</small><b>${naVal(billValues, "last_statement_balance", m)}</b>${hk("last_statement_balance")}<em>${L.last_statement_issue_date ? `${md(L.last_statement_issue_date)} 出账` : ""}</em></div>
+              <div><small>最低还款</small><b>${naVal(billValues, "minimum_payment_amount", m)}</b>${hk("minimum_payment_amount")}<em>&nbsp;</em></div>
+              <div><small>上次还款</small>${lp ? `<b>${m(lp.amount)}</b><em>${md(lp.date)}${lp.pending ? " · 处理中" : ""}</em>` : `<b>${naVal(billValues, "last_payment_amount", m)}</b>${hk("last_payment_amount")}<em>${L.last_payment_date ? md(L.last_payment_date) : ""}</em>`}</div>
               ${paidNow ? `<div><small>本期已还</small><b class="good">${m(due.pay.amount)}</b><em>${due.fullPaid ? "已还清" : `余 ${m(due.remaining)}`}</em></div>` : `<div><small>逾期</small><b class="${L.is_overdue ? "bad" : "good"}">${L.is_overdue == null ? "—" : L.is_overdue ? "是" : "否"}</b><em>&nbsp;</em></div>`}
             </div>
           </div>
@@ -123,11 +124,11 @@
     if (isCredit) {
       const last = lastClosing(a.id, t0), nextC = nextClosing(a.id, addDay(last));
       const cur = state.txns.filter((t) => t.account_id === a.id && t.date > last && t.date <= t0);
-      let spend = 0, pts = 0;
+      let spend = 0, nativeSpend = 0, pts = 0;
       for (const t of cur) {
         const e = state.earn.get(t.id);
-        if (e && e.cat === "none") continue;
-        spend += t.amount; if (e) pts += e.earned;
+        if (e?.cat === "none" || (a.fx && isCardPayment(t))) continue;
+        spend += t.amount; nativeSpend += t.orig_amount ?? t.amount; if (e) pts += e.earned;
       }
       const days = Math.round((new Date(nextC) - new Date(last)) / 864e5), gone = Math.round((new Date(t0) - new Date(last)) / 864e5);
       cycle = `<section class="ad-sec">
@@ -137,7 +138,7 @@
           <div class="ad-cycle-dates"><span>${md(addDay(last))} 起</span><span>${md(nextC)} 出账 · 还有 ${Math.max(0, Math.round((new Date(nextC) - new Date(t0)) / 864e5))} 天</span></div>
         </div>
         <div class="ad-stats three">
-          <div><small>本期消费</small><b>${esc(moneyText(spend, a))}</b>${usdLine(a, spend, "orig")}</div>
+          <div><small>本期消费</small><b>${esc(a.fx ? fmtOrig(nativeSpend, a.orig_currency) : moneyText(spend, a))}</b>${usdLine(a, spend, "orig")}</div>
           <div><small>本期 Pending 积分</small><b style="color:${prog?.color || "inherit"}">${prog && !product.noEarn ? `+${esc(R.fmtEarned(pts, prog.unit))}${prog.unit === "cash" ? "" : " " + esc(prog.short)}` : "—"}</b></div>
           <div><small>平均倍数</small><b>${prog && !product.noEarn && spend > 0 ? esc(R.fmtRate((pts / spend) * (prog.unit === "cash" ? 100 : 1), prog.unit)) : "—"}</b></div>
         </div>
@@ -158,7 +159,7 @@
         ${(() => {
           const f = window.RT_CAL?.feeInfo(a);
           return `<div class="ad-fee">${f
-            ? `<span class="lg fee">年</span><span>年费 <b>${esc(moneyText(f.amount, a))}</b> · 上次 ${md(f.last.date)} 扣费 · 下次约 <b>${ymd(f.next)}</b>（还有 ${Math.round((new Date(f.next) - new Date(t0)) / 864e5)} 天）</span>`
+            ? `<span class="lg fee">年</span><span>年费 <b>${esc(moneyText(f.amount, f.last))}</b> · 上次 ${md(f.last.date)} 扣费 · 下次约 <b>${ymd(f.next)}</b>（还有 ${Math.round((new Date(f.next) - new Date(t0)) / 864e5)} 天）</span>`
             : `<span class="lg fee off">年</span><span>交易记录里没找到年费（可能没有年费，或扣费早于 Plaid 能拿到的 24 个月）</span>`}</div>`;
         })()}
         ${product?.rules?.length ? `<ul class="ad-rules">${product.rules.filter((r) => !r.to || r.to >= t0).map((r) => `<li><b>${esc(R.fmtRate(r.rates ? Math.max(r.rate, ...Object.values(r.rates)) : r.rate, prog.unit))}</b>${esc(r.cats.map((c) => R.CATS[c] || c).slice(0, 4).join("、"))}${r.cap ? ` <small>上限 $${r.cap.toLocaleString()}</small>` : ""}${r.note ? ` <small>${esc(r.note)}</small>` : ""}</li>`).join("")}</ul>` : ""}
@@ -168,7 +169,7 @@
     const tech = `<details class="d-raw"><summary>账户信息</summary><dl>
         <div class="d-row"><dt>银行</dt><dd>${esc(a.institution)}</dd></div>
         <div class="d-row"><dt>类型</dt><dd>${esc(a.type)} / ${esc(a.subtype || "—")}</dd></div>
-        <div class="d-row"><dt>币种</dt><dd>${a.orig_currency ? `${esc(a.orig_currency)} <small>按 1 USD = ${FX_PER_USD[a.orig_currency]} ${esc(a.orig_currency)} 换算成美元显示</small>` : esc(a.currency || "USD")}</dd></div>
+        <div class="d-row"><dt>币种</dt><dd>${a.orig_currency ? `${esc(a.orig_currency)} <small>${esc(fxDescription(a))}</small>` : esc(a.currency || "USD")}</dd></div>
         <div class="d-row"><dt>数据来源</dt><dd>${isManual(a) ? "月结单导入（不经 Plaid）" : "Plaid"}</dd></div>
         <div class="d-row"><dt>${isManual(a) ? "上次导入" : "上次同步"}</dt><dd>${it?.last_synced ? new Date(it.last_synced).toLocaleString("zh-CN") : "—"}</dd></div>
         <div class="d-row mono"><dt>account_id</dt><dd><code>${esc(a.id)}</code></dd></div>

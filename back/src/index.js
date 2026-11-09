@@ -249,7 +249,7 @@ const ROUTES = {
       o.count++;
       if (!o.last_date || t.date > o.last_date) o.last_date = t.date;
     }
-    return { item_id: id, accounts: out };
+    return { item_id: id, accounts: out, pulse_cny_fx: true };
   },
 
   "PUT /api/benefits": async (env, body) => {
@@ -537,6 +537,7 @@ function cleanManualTxn(t, acctIds) {
   if (num(t.amount) == null) return `金额不合法：${t.amount}`;
   const currency = str(t.currency, 3) || "USD";
   if (!/^[A-Z]{3}$/.test(currency)) return `币种不合法：${t.currency}`;
+  if (t.account_id === "hsbc_pulse_cny" && currency !== "CNY") return "Pulse 人民币账户需要 CNY 金额";
   const detail = t.detail && typeof t.detail === "object" ? t.detail : {};
   if (JSON.stringify(detail).length > 4000) return "detail 太大";
   return {
@@ -558,6 +559,40 @@ function cleanManualTxn(t, acctIds) {
     logo: null,
     source: str(t.source, 40),
   };
+}
+
+// Lock the daily ECB USD/CNY reference quote when a Pulse transaction is imported.
+// The lookup receives calendar dates only. Original CNY drives deduplication and reconciliation.
+async function settlePulseTransactions(transactions) {
+  if (!transactions.length) return;
+  const byYear = new Map();
+  for (const t of transactions) {
+    const day = t.authorized_date || t.date;
+    const year = day.slice(0, 4);
+    if (!byYear.has(year)) byYear.set(year, []);
+    byYear.get(year).push(t);
+  }
+  for (const [year, batch] of byYear) {
+    const dates = batch.map(t => t.authorized_date || t.date).sort();
+    const from = new Date(Date.parse(dates[0]) - 14 * 86400000).toISOString().slice(0, 10);
+    const params = new URLSearchParams({ base: "USD", quotes: "CNY", providers: "ECB", from, to: dates.at(-1) });
+    let rows;
+    try {
+      const response = await fetch("https://api.frankfurter.dev/v2/rates?" + params, { signal: AbortSignal.timeout(8000) });
+      if (!response.ok) throw new Error();
+      rows = (await response.json()).filter(r => r.base === "USD" && r.quote === "CNY" &&
+        dateOrNull(r.date) && Number.isFinite(r.rate) && r.rate > 0).sort((a, b) => a.date.localeCompare(b.date));
+    } catch {
+      throw httpError(503, `暂时无法获取 ${year} 年人民币参考汇率，请稍后重试导入`);
+    }
+    for (const t of batch) {
+      const day = t.authorized_date || t.date;
+      const quote = rows.findLast(r => r.date <= day);
+      if (!quote || Date.parse(day) - Date.parse(quote.date) > 7 * 86400000)
+        throw httpError(503, `缺少 ${day} 的可用人民币参考汇率，请稍后重试导入`);
+      t.usd_fx = { source: "ECB", date: quote.date, rate: quote.rate, amount: t.amount / quote.rate };
+    }
+  }
 }
 
 async function manualImport(env, body) {
@@ -628,9 +663,16 @@ async function manualImport(env, body) {
   }
   const room = new Map();   // 每个键还能新增几笔 = 这次的笔数 − 库里已有的笔数
   const rejected = [];
+  const pulseKeys = new Set();
   for (const t of list) {
     const c = cleanManualTxn(t, acctIds);
     if (typeof c === "string") { rejected.push({ id: t?.id ?? null, reason: c }); continue; }
+    if (c.account_id === "hsbc_pulse_cny") {
+      pulseKeys.add(dkey(c));
+      const previous = store[c.id];
+      if (previous?.usd_fx && previous.amount === c.amount &&
+          (previous.authorized_date || previous.date) === (c.authorized_date || c.date)) c.usd_fx = previous.usd_fx;
+    }
     // 已存在的跳过；但待入账的可以被更新（金额 / 状态会变）
     if (store[c.id] && !body.overwrite && !store[c.id].pending) { skipped++; continue; }
     if (body.dedupe === "date_amount" && !store[c.id] && !c.pending) {
@@ -652,6 +694,11 @@ async function manualImport(env, body) {
     }
   }
 
+  if (pulseKeys.size) {
+    // Includes legacy statement rows matched by date/amount even when the incoming ID differs.
+    await settlePulseTransactions(Object.values(store).filter(t =>
+      t.account_id === "hsbc_pulse_cny" && t.currency === "CNY" && !t.usd_fx && pulseKeys.has(dkey(t))));
+  }
   const ids = await getJSON(env, "items", []);
   if (!ids.includes(id)) ids.push(id);
   await Promise.all([

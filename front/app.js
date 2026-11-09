@@ -17,11 +17,11 @@ window.brandFail = (img) => {
 const EMPTY_REWARDS = () => ({ cards: {}, rules: {}, balances: {}, closing: {}, cardface: {} });
 
 // ---------------------------------------------------------------- 非美元账户（香港 Amex，港币）
-// 按固定汇率换算成美元：汇总、分析、积分都用美元金额；港币原值留在 orig_amount / orig 里给界面显示
-// HKD 联系汇率；CNY 为固定估算汇率（汇丰 Pulse 人民币子账户），只用于换算美元统计
+// 美元金额用于汇总。Pulse 人民币使用交易日参考价，原币金额保留用于展示和核账。
+// 其他账户沿用固定估值；缺少历史报价时，Pulse 也使用 CNY 备用值。
 const FX_PER_USD = { HKD: 7.8, CNY: 7.1 };
 // 不在这里四舍五入：港卡显示时要乘回港币，保留全精度才能分毫不差（显示时由 fmt 取到分）
-const toUSD = (v, cur) => (typeof v === "number" && FX_PER_USD[cur] ? v / FX_PER_USD[cur] : v);
+const toUSD = (v, rate) => typeof v === "number" ? v / rate : v;
 const fmtOrig = (v, cur) => (cur === "HKD"
   ? `${v < 0 ? "−" : ""}HK$${Math.abs(v).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
   : fmt(v, cur));
@@ -31,15 +31,15 @@ const isHSBC = (x) => /hsbc/i.test(x?.institution || "");
 const fxNote = (cur) => `1 USD = ${FX_PER_USD[cur]} ${cur}`;
 function manualNote(it) {
   if (isHSBC(it)) {
-    const curs = [...new Set(it.accounts.map((a) => a.orig_currency).filter(Boolean))];
-    return `<b>没有通过 Plaid 连接。</b>交易来自汇丰月结单（PDF）导入，不会自动同步，新结单出来后再导入一次；金额以原币显示，美元小字按 ${curs.map(fxNote).join("、")} 换算；结单没有 MCC，本站不估算汇丰积分。点开卡片看详情。`;
+    const rates = new Set(it.accounts.filter(a => a.orig_currency).map(a => a.fx ? "ECB USD/CNY" : fxNote(a.orig_currency)));
+    return `<b>没有通过 Plaid 连接。</b>交易来自汇丰月结单（PDF）导入，不会自动同步，新结单出来后再导入一次；金额以原币显示，美元小字按 ${[...rates].join("、")} 换算；结单没有 MCC，本站不估算汇丰积分。点开卡片看详情。`;
   }
   return `<b>没有通过 Plaid 连接。</b>历史交易来自月结单，新交易在你打开 Amex 网银时由脚本推送；金额以港币显示，美元小字按 1 USD = 7.8 HKD 换算；没有 MCC，本站不估算积分。点开卡片看详情。`;
 }
 // 问卷里填 N/A 的账单字段：值换成 null（其余代码按「未知」处理），键名记在 L.na 里，界面显示「没有」
 const naVal = (L, key, f) => (L?.na?.includes(key) ? "没有" : L?.[key] != null ? f(L[key]) : "—");
 const LIAB_MONEY = ["last_statement_balance", "minimum_payment_amount", "last_payment_amount", "remaining_statement_balance"];
-function normLiability(L, cur) {
+function normLiability(L, cur, quote) {
   if (!L) return L;
   const out = { ...L, na: [] };
   for (const [k, v] of Object.entries(L)) if (v === "N/A") { out[k] = null; out.na.push(k); }
@@ -47,30 +47,50 @@ function normLiability(L, cur) {
   else if (Array.isArray(L.aprs)) out.aprs = L.aprs.map((x) => (x.pct === "N/A" ? { ...x, pct: null, na: true } : x));
   if (FX_PER_USD[cur]) {
     out.orig = {};
-    for (const k of LIAB_MONEY) { out.orig[k] = out[k]; out[k] = toUSD(out[k], cur); }
+    for (const k of LIAB_MONEY) {
+      out.orig[k] = out[k];
+      if (typeof out[k] !== "number") continue;
+      const date = k === "last_payment_amount" ? L.last_payment_date : L.last_statement_issue_date;
+      out[k] = toUSD(out[k], quote ? quote(date).rate : FX_PER_USD[cur]);
+    }
   }
   return out;
 }
 function normAccount(a, it) {
   const cur = a.currency;
-  const base = { ...a, source: it.source || "plaid", region: it.region || null, liability: normLiability(a.liability, cur) };
+  const pulse = a.id === pulseCnyId && cur === "CNY";
+  const day = a.balance_as_of?.slice(0, 10) || a.liability?.last_statement_issue_date || today();
+  const quote = pulse ? date => pulseRates.quote(date || day) : null;
+  const fx = quote?.(day);
+  const rate = fx?.rate || FX_PER_USD[cur];
+  const base = { ...a, source: it.source || "plaid", region: it.region || null, liability: normLiability(a.liability, cur, quote) };
   if (!FX_PER_USD[cur]) return base;
   return {
-    ...base, currency: "USD", orig_currency: cur,
+    ...base, currency: "USD", orig_currency: cur, fx,
     orig: { balance_current: a.balance_current, balance_available: a.balance_available, limit: a.limit },
-    balance_current: toUSD(a.balance_current, cur), balance_available: toUSD(a.balance_available, cur), limit: toUSD(a.limit, cur),
+    balance_current: pulse ? pulseBalance(a, state.txns, rate) : toUSD(a.balance_current, rate), balance_available: toUSD(a.balance_available, rate), limit: toUSD(a.limit, rate),
   };
 }
-const normTxn = (t) => (FX_PER_USD[t.currency]
-  ? { ...t, amount: toUSD(t.amount, t.currency), currency: "USD", orig_amount: t.amount, orig_currency: t.currency }
-  : t);
+function normTxn(t) {
+  if (!FX_PER_USD[t.currency]) return t;
+  const pulse = t.account_id === pulseCnyId && t.currency === "CNY";
+  const booked = pulse ? bookedPulseFx(t) : null;
+  const fx = pulse ? booked || pulseRates.quote(t.authorized_date || t.date) : null;
+  return { ...t, amount: booked?.amount ?? toUSD(t.amount, fx?.rate || FX_PER_USD[t.currency]), currency: "USD", orig_amount: t.amount, orig_currency: t.currency, fx };
+}
+function fxDescription(x) {
+  if (!x.fx) return `按 1 USD = ${FX_PER_USD[x.orig_currency]} ${x.orig_currency} 换算成美元显示`;
+  const { date, rate } = x.fx;
+  const source = date ? "ECB " + date : RT_I18N.t("估算汇率");
+  return `${source} · 1 USD = ${rate} CNY · 1 CNY = ${(1 / rate).toFixed(6)} USD`;
+}
 // 港币原值的小字（没有换算过的账户返回空）
 // 港币卡（以及以后的汇丰等香港卡）：主显港币（HK$），美元做小字；其他账户照旧显示美元。
 // x 是任何带 orig_currency 的对象：账户、交易、dueInfo 的结果都可以；usd 是换算后的美元金额
 // trim：整数金额省掉「.00」（额度、可用额度这类整数，窄屏放得下）
 const moneyText = (usd, x, trim = false) => {
   if (!(x?.orig_currency && typeof usd === "number")) return fmt(usd);
-  const s = fmtOrig(usd * FX_PER_USD[x.orig_currency], x.orig_currency);
+  const s = fmtOrig(x.nativeAmounts ? usd : usd * (x.fx?.rate || FX_PER_USD[x.orig_currency]), x.orig_currency);
   return trim ? s.replace(/\.00$/, "") : s;
 };
 const money = (usd, x, cls = "usd") => (x?.orig_currency && typeof usd === "number"
@@ -111,12 +131,12 @@ function isCardPayment(t) {
   return (t.category === "TRANSFER_IN" || !t.category) && PAY_RE.test(`${t.name || ""} ${t.merchant || ""}`);
 }
 // 上期账单出账之后收到的还款：交易记录（及时，含 Pending）和 Liabilities 的 last_payment（可能滞后几天）取较大者
-function paymentsSince(a, since) {
+function paymentsSince(a, since, L) {
   const list = state.txns.filter((t) => t.account_id === a.id && t.date > since && isCardPayment(t))
     .sort((x, y) => (x.date < y.date ? 1 : -1));
-  let amount = list.reduce((s, t) => s - t.amount, 0);
-  let last = list[0] ? { date: list[0].date, amount: -list[0].amount, pending: !!list[0].pending } : null;
-  const L = a.liability;
+  const value = t => a.fx ? t.orig_amount : t.amount;
+  let amount = list.reduce((s, t) => s - value(t), 0);
+  let last = list[0] ? { date: list[0].date, amount: -value(list[0]), pending: !!list[0].pending } : null;
   if (L?.last_payment_date && L.last_payment_date > since && (L.last_payment_amount ?? 0) > amount) {
     amount = L.last_payment_amount;
     last = { date: L.last_payment_date, amount: L.last_payment_amount, pending: false };
@@ -124,11 +144,12 @@ function paymentsSince(a, since) {
   return { amount, last, list };   // 不取整：港卡要换回港币显示
 }
 function dueInfo(a) {
-  const L = a?.liability;
+  const bill = a?.liability;
+  const L = a?.fx && bill ? { ...bill, ...bill.orig } : bill;
   if (!L?.next_payment_due_date) return null;   // 没有还款日（或问卷填了 N/A）
   const days = Math.ceil((new Date(L.next_payment_due_date + "T00:00:00") - new Date(new Date().toDateString())) / 864e5);
   const stmt = L.last_statement_balance ?? 0;
-  let pay = L.last_statement_issue_date ? paymentsSince(a, L.last_statement_issue_date) : { amount: 0, last: null, list: [] };
+  let pay = L.last_statement_issue_date ? paymentsSince(a, L.last_statement_issue_date, L) : { amount: 0, last: null, list: [] };
   // 网银给了「月结单尚欠」（香港 Amex）：以它为准，还款交易还没推上来也能判断
   if (L.remaining_statement_balance != null) pay = { ...pay, amount: Math.max(pay.amount, stmt - L.remaining_statement_balance) };
   const need = Math.min(L.minimum_payment_amount ?? stmt, stmt);
@@ -137,7 +158,7 @@ function dueInfo(a) {
   const paid = !nothing && pay.amount > 0 && pay.amount >= need - 0.005;
   const remaining = stmt - pay.amount > 0.004 ? stmt - pay.amount : 0;
   const level = L.is_overdue && !paid ? "overdue" : paid || nothing ? "paid" : days <= 3 ? "urgent" : days <= 7 ? "soon" : "ok";
-  return { ...L, days, paid, fullPaid, nothing, remaining, pay, level, orig_currency: a.orig_currency || null };
+  return { ...L, days, paid, fullPaid, nothing, remaining, pay, level, nativeAmounts: !!a.fx, orig_currency: a.orig_currency || null };
 }
 // 还款状态短文案（账户详情、日历共用）
 function dueLabel(d, left = d.days) {
@@ -193,22 +214,27 @@ async function api(path, { method = "GET", body } = {}) {
   return data;
 }
 
-function ingest(data) {
+let ingestVersion = 0;
+async function ingest(data) {
+  const version = ++ingestVersion;
+  await pulseRates.prepare(data);
+  if (version !== ingestVersion) return;
   state.env = data.env;
-  state.items = data.items;
   state.txns = data.transactions.map(normTxn);
   state.benefits = data.benefits || [];
   state.rewards = { ...EMPTY_REWARDS(), ...(data.rewards || {}) };
   state.accounts = {};
-  for (const it of data.items) {
-    it.accounts = it.accounts.map((a) => normAccount(a, it));
-    for (const a of it.accounts) state.accounts[a.id] = { ...a, institution: it.institution };
-  }
+  state.items = data.items.map(it => {
+    const accounts = it.accounts.map(a => normAccount(a, it));
+    for (const a of accounts) state.accounts[a.id] = { ...a, institution: it.institution };
+    return { ...it, accounts };
+  });
+  $("#fx-warning").hidden = !pulseRates.estimated;
   render();
 }
 
 async function load() {
-  ingest(await api("/api/data"));
+  await ingest(await api("/api/data"));
   loadLogos();
   window.RT_CARDS?.loadImages();
 }
@@ -222,7 +248,7 @@ async function sync() {
   const btn = $("#btn-sync");
   btn.disabled = true; btn.textContent = "同步中…";
   try {
-    ingest(await api("/api/sync", { method: "POST" }));
+    await ingest(await api("/api/sync", { method: "POST" }));
     const errs = state.items.filter((i) => i.error);
     toast(errs.length ? `${errs.length} 个连接需要处理，见「账户」` : "已同步");
   } catch (e) { toast(e.message); }
@@ -562,7 +588,7 @@ function renderAccounts() {
           ${["credit", "depository", "investment"].includes(a.type) ? `<span class="acct-face">${RT_CARDS.face(state.accounts[a.id] || a, "sm")}</span>` : ""}
           <div class="acct-info"><div class="acct-name">${esc(name)}${a.mask ? ` <span class="mask">··${esc(a.mask)}</span>` : ""}</div><div class="meta">${esc(sub)}</div>${dueChip(state.accounts[a.id] || a)}</div>
           <div class="acct-amt">
-            <div>${a.balance_current != null ? esc(moneyText(a.balance_current, a)) : "—"}</div>
+            <div>${a.balance_current != null ? esc(balanceText(a)) : "—"}</div>
             ${usdLine(a, a.balance_current)}
             <div class="meta">${a.limit ? "额度 " + esc(moneyText(a.limit, a, true)) : ""}${a.limit && a.orig_currency ? `<span class="orig"> · ${esc(fmt(a.limit))}</span>` : ""}</div>
           </div>
@@ -923,7 +949,7 @@ async function resync() {
   const btn = $("#btn-resync");
   if (!confirm("重新拉取所有银行的全部交易？需要一点时间。")) return;
   btn.disabled = true; btn.textContent = "拉取中…";
-  try { ingest(await api("/api/resync", { method: "POST" })); toast("已重新拉取全部交易"); }
+  try { await ingest(await api("/api/resync", { method: "POST" })); toast("已重新拉取全部交易"); }
   catch (e) { toast(e.message); }
   finally { btn.disabled = false; btn.textContent = "重新拉取全部交易"; }
 }
@@ -1029,8 +1055,11 @@ function dueChip(a) {
 }
 
 // 额度进度：已用 / 额度，30% 以内绿色、30–70% 琥珀、70% 以上红色（信用分常看 30% 这条线）
+function balanceText(a) {
+  return a.fx ? fmtOrig(a.orig.balance_current, a.orig_currency) : moneyText(a.balance_current, a);
+}
 function limitBar(a) {
-  const used = Math.max(0, a.balance_current || 0), lim = a.limit;
+  const used = Math.max(0, a.fx ? toUSD(a.orig.balance_current, a.fx.rate) : a.balance_current || 0), lim = a.limit;
   const pct = Math.min(100, (used / lim) * 100);
   const avail = a.balance_available != null ? a.balance_available : lim - used;
   const level = pct < 30 ? "ok" : pct < 70 ? "mid" : "high";
@@ -1045,6 +1074,7 @@ function limitBar(a) {
 // ---------------------------------------------------------------- login
 
 function showLogin(msg) {
+  ingestVersion++;
   state.items = []; state.txns = []; state.benefits = []; state.accounts = {};
   state.rewards = EMPTY_REWARDS(); state.earn = new Map(); state.logos = {};
   state.editing = false; state.draft = null; $("#editbar").hidden = true;

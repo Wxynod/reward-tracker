@@ -16,6 +16,9 @@
 
   // ---------------------------------------------------------------- 整句
   const DICT = {
+    "估算汇率": "Estimated rate",
+    "部分人民币日期缺少近期报价，美元汇总含估算值。": "Recent quotes are unavailable for some CNY dates. USD totals include estimates.",
+    "消费按交易日参考汇率折算，未偿欠款按加权成本折算，余额快照按快照日折算。": "Spending uses transaction-date reference rates, outstanding debt uses weighted average cost, and balance snapshots use their dated rate.",
     // 顶栏 / 标签页 / 登录
     "记账本": "Reward Tracker", "记账本 · Reward Tracker": "Reward Tracker",
     "同步": "Sync", "连接银行": "Link bank", "退出": "Sign out", "设置": "Settings",
