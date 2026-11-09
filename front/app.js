@@ -18,7 +18,8 @@ const EMPTY_REWARDS = () => ({ cards: {}, rules: {}, balances: {}, closing: {}, 
 
 // ---------------------------------------------------------------- 非美元账户（香港 Amex，港币）
 // 按固定汇率换算成美元：汇总、分析、积分都用美元金额；港币原值留在 orig_amount / orig 里给界面显示
-const FX_PER_USD = { HKD: 7.8 };
+// HKD 联系汇率；CNY 为固定估算汇率（汇丰 Pulse 人民币子账户），只用于换算美元统计
+const FX_PER_USD = { HKD: 7.8, CNY: 7.1 };
 // 不在这里四舍五入：港卡显示时要乘回港币，保留全精度才能分毫不差（显示时由 fmt 取到分）
 const toUSD = (v, cur) => (typeof v === "number" && FX_PER_USD[cur] ? v / FX_PER_USD[cur] : v);
 const fmtOrig = (v, cur) => (cur === "HKD"

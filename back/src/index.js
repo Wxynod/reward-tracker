@@ -450,7 +450,8 @@ async function verifyIngest(request, env) {
 function manualBalances(accounts, txns) {
   for (const a of accounts) {
     if (!a.balance_from_txns || a.balance_as_of) continue; // 有网银快照时用快照（和 Amex 显示的一致）
-    const bal = txns.filter((t) => t.account_id === a.id && !t.pending).reduce((s, t) => s + t.amount, 0);
+    // opening_balance：第一份导入结单之前的结余（更早的结单没导入时，例如汇丰 EveryMile）
+    const bal = (a.opening_balance || 0) + txns.filter((t) => t.account_id === a.id && !t.pending).reduce((s, t) => s + t.amount, 0);
     a.balance_current = round2(bal);
     a.balance_available = typeof a.limit === "number" ? round2(a.limit - bal) : null;
   }
@@ -482,6 +483,7 @@ function cleanManualAccount(a) {
     limit: num(a.limit),
     currency,
     balance_from_txns: !!a.balance_from_txns,
+    opening_balance: num(a.opening_balance),
     opened: dateOrNull(a.opened),
     balance_as_of: str(a.balance_as_of, 40),
   };
