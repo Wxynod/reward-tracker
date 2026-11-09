@@ -1,7 +1,7 @@
 // Reward Tracker — 账户详情：点「账户」页任意一个账户打开。
 // 电脑上从中间浮出、手机上从底部滑出（和交易明细同一套交互）。卡面大图放在最上面，「更换卡面」直接在卡片里展开。
 // 用到 app.js / cards.js / rewards.js 的全局：state、R、fmt、esc、cardName、productOf、productOptions、closingDay、dueInfo、
-// lastClosing、nextClosing、limitBar、saveRewards、today、connect、RT_CARDS、isManual、naVal、fmtOrig、origLine、regionTag。
+// lastClosing、nextClosing、limitBar、saveRewards、today、connect、RT_CARDS、isManual、naVal、moneyText、money、usdLine、regionTag。
 
 (function () {
   let current = null, faceOpen = false;
@@ -46,7 +46,7 @@
         <ul>
           <li><b>不会自动同步。</b>「同步」「立刻从银行刷新」对它没有作用；只有打开 Amex 网银的交易页面时才会更新。</li>
           <li><b>当前欠款、可用额度、还款日、最低还款</b>取自 Amex 网银首页（總結欠 / 可用信用額），打开网银时更新${a.balance_as_of ? `，最近一次是 ${esc(new Date(a.balance_as_of).toLocaleString("zh-CN"))}` : "；还没抓到过时，欠款按已导入交易累计"}。</li>
-          <li><b>金额是港币。</b>按固定汇率 1 USD = 7.8 HKD 换算成美元参与汇总，和 Amex 实际入账汇率无关；港币原值显示在旁边。</li>
+          <li><b>金额以港币显示。</b>美元小字和各种汇总按固定汇率 1 USD = 7.8 HKD 换算，和 Amex 实际入账汇率无关。</li>
           <li><b>没有 MCC 和 Plaid 商户分类，</b>分类统计里大多归入「其他」；本站不估算这张卡的积分，季度加赏看 Amex HK Tracker。</li>
           <li><b>账单信息</b>由结单算出或来自问卷，问卷填 N/A 的项目显示「没有」。</li>
         </ul>
@@ -56,9 +56,9 @@
     const avail = a.balance_available != null ? a.balance_available : a.limit ? a.limit - (a.balance_current || 0) : null;
     const bal = `<section class="ad-sec">
         <div class="ad-stats">
-          <div><small>${isCredit ? "当前欠款" : "当前余额"}</small><b>${a.balance_current != null ? fmt(a.balance_current, a.currency) : "—"}</b>${origLine(a, "balance_current", "orig")}</div>
-          ${isCredit ? `<div><small>信用额度</small><b>${a.limit ? fmt(a.limit, a.currency) : "—"}</b>${origLine(a, "limit", "orig")}</div>` : ""}
-          <div><small>可用${isCredit ? "额度" : "余额"}</small><b>${avail != null ? fmt(avail, a.currency) : "—"}</b>${origLine(a, "balance_available", "orig")}</div>
+          <div><small>${isCredit ? "当前欠款" : "当前余额"}</small><b>${a.balance_current != null ? esc(moneyText(a.balance_current, a)) : "—"}</b>${usdLine(a, a.balance_current, "orig")}</div>
+          ${isCredit ? `<div><small>信用额度</small><b>${a.limit ? esc(moneyText(a.limit, a, true)) : "—"}</b>${a.limit ? usdLine(a, a.limit, "orig") : ""}</div>` : ""}
+          <div><small>可用${isCredit ? "额度" : "余额"}</small><b>${avail != null ? esc(moneyText(avail, a, true)) : "—"}</b>${usdLine(a, avail, "orig")}</div>
         </div>
         ${isCredit && a.limit ? limitBar(a) : ""}
         ${isCredit && !a.limit ? `<p class="hint">这张卡没有固定额度（签账卡）或银行没有提供额度。</p>` : ""}
@@ -68,8 +68,8 @@
     let bill = "";
     if (isCredit) {
       if (L) {
-        const LO = L.orig || {};
-        const hk = (k) => (LO[k] != null && a.orig_currency ? `<em class="orig">${esc(fmtOrig(LO[k], a.orig_currency))}</em>` : "");
+        const m = (v) => esc(moneyText(v, a));
+        const hk = (k) => (a.orig_currency && typeof L[k] === "number" ? `<em class="orig">${esc(fmt(L[k]))}</em>` : "");   // 港卡：美元小字
         const dueTxt = L.na?.includes("next_payment_due_date") ? "没有" : !due ? "—" : dueLabel(due);
         const lp = due?.pay.last && !(L.last_payment_date && L.last_payment_date >= due.pay.last.date && L.last_payment_amount === due.pay.last.amount) ? due.pay.last : null;
         const paidNow = due && !due.nothing && due.pay.amount > 0;
@@ -82,10 +82,10 @@
               <span class="due-chip ${due?.level || ""}">${esc(dueTxt)}</span>
             </div>
             <div class="ad-grid4">
-              <div><small>上期账单</small><b>${naVal(L, "last_statement_balance", (v) => fmt(v))}</b>${hk("last_statement_balance")}<em>${L.last_statement_issue_date ? `${md(L.last_statement_issue_date)} 出账` : ""}</em></div>
-              <div><small>最低还款</small><b>${naVal(L, "minimum_payment_amount", (v) => fmt(v))}</b>${hk("minimum_payment_amount")}<em>&nbsp;</em></div>
-              <div><small>上次还款</small>${lp ? `<b>${fmt(lp.amount)}</b><em>${md(lp.date)}${lp.pending ? " · 处理中" : ""}</em>` : `<b>${naVal(L, "last_payment_amount", (v) => fmt(v))}</b>${hk("last_payment_amount")}<em>${L.last_payment_date ? md(L.last_payment_date) : ""}</em>`}</div>
-              ${paidNow ? `<div><small>本期已还</small><b class="good">${fmt(due.pay.amount)}</b><em>${due.fullPaid ? "已还清" : `余 ${fmt(due.remaining)}`}</em></div>` : `<div><small>逾期</small><b class="${L.is_overdue ? "bad" : "good"}">${L.is_overdue == null ? "—" : L.is_overdue ? "是" : "否"}</b><em>&nbsp;</em></div>`}
+              <div><small>上期账单</small><b>${naVal(L, "last_statement_balance", m)}</b>${hk("last_statement_balance")}<em>${L.last_statement_issue_date ? `${md(L.last_statement_issue_date)} 出账` : ""}</em></div>
+              <div><small>最低还款</small><b>${naVal(L, "minimum_payment_amount", m)}</b>${hk("minimum_payment_amount")}<em>&nbsp;</em></div>
+              <div><small>上次还款</small>${lp ? `<b>${m(lp.amount)}</b><em>${md(lp.date)}${lp.pending ? " · 处理中" : ""}</em>` : `<b>${naVal(L, "last_payment_amount", m)}</b>${hk("last_payment_amount")}<em>${L.last_payment_date ? md(L.last_payment_date) : ""}</em>`}</div>
+              ${paidNow ? `<div><small>本期已还</small><b class="good">${m(due.pay.amount)}</b><em>${due.fullPaid ? "已还清" : `余 ${m(due.remaining)}`}</em></div>` : `<div><small>逾期</small><b class="${L.is_overdue ? "bad" : "good"}">${L.is_overdue == null ? "—" : L.is_overdue ? "是" : "否"}</b><em>&nbsp;</em></div>`}
             </div>
           </div>
           ${L.aprs?.length ? `<table class="ad-apr"><thead><tr><th>APR</th><th>年利率</th><th>计息余额</th><th>本期利息</th></tr></thead><tbody>
@@ -125,7 +125,7 @@
           <div class="ad-cycle-dates"><span>${md(addDay(last))} 起</span><span>${md(nextC)} 出账 · 还有 ${Math.max(0, Math.round((new Date(nextC) - new Date(t0)) / 864e5))} 天</span></div>
         </div>
         <div class="ad-stats three">
-          <div><small>本期消费</small><b>${fmt(spend)}</b></div>
+          <div><small>本期消费</small><b>${esc(moneyText(spend, a))}</b>${usdLine(a, spend, "orig")}</div>
           <div><small>本期 Pending 积分</small><b style="color:${prog?.color || "inherit"}">${prog && !product.noEarn ? `+${esc(R.fmtEarned(pts, prog.unit))}${prog.unit === "cash" ? "" : " " + esc(prog.short)}` : "—"}</b></div>
           <div><small>平均倍数</small><b>${prog && !product.noEarn && spend > 0 ? esc(R.fmtRate((pts / spend) * (prog.unit === "cash" ? 100 : 1), prog.unit)) : "—"}</b></div>
         </div>
@@ -146,7 +146,7 @@
         ${(() => {
           const f = window.RT_CAL?.feeInfo(a);
           return `<div class="ad-fee">${f
-            ? `<span class="lg fee">年</span><span>年费 <b>${fmt(f.amount)}</b> · 上次 ${md(f.last.date)} 扣费 · 下次约 <b>${ymd(f.next)}</b>（还有 ${Math.round((new Date(f.next) - new Date(t0)) / 864e5)} 天）</span>`
+            ? `<span class="lg fee">年</span><span>年费 <b>${esc(moneyText(f.amount, a))}</b> · 上次 ${md(f.last.date)} 扣费 · 下次约 <b>${ymd(f.next)}</b>（还有 ${Math.round((new Date(f.next) - new Date(t0)) / 864e5)} 天）</span>`
             : `<span class="lg fee off">年</span><span>交易记录里没找到年费（可能没有年费，或扣费早于 Plaid 能拿到的 24 个月）</span>`}</div>`;
         })()}
         ${product?.rules?.length ? `<ul class="ad-rules">${product.rules.filter((r) => !r.to || r.to >= t0).map((r) => `<li><b>${esc(R.fmtRate(r.rates ? Math.max(r.rate, ...Object.values(r.rates)) : r.rate, prog.unit))}</b>${esc(r.cats.map((c) => R.CATS[c] || c).slice(0, 4).join("、"))}${r.cap ? ` <small>上限 $${r.cap.toLocaleString()}</small>` : ""}${r.note ? ` <small>${esc(r.note)}</small>` : ""}</li>`).join("")}</ul>` : ""}

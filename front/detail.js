@@ -60,7 +60,7 @@
     const ch = CHANNELS[t.channel];
     const title = t.merchant || t.name;
     const brand = B.url(t) || t.logo;
-    const amt = t.amount > 0 ? `−${fmt(t.amount, t.currency)}` : `+${fmt(-t.amount, t.currency)}`;
+    const amt = txnAmt(t);   // 港币交易主显 HK$
     const loc = d.location || {};
     const addr = [loc.address, loc.city, loc.region, loc.postal_code, loc.country].filter(Boolean).join(", ");
     const mapQ = loc.lat != null && loc.lon != null ? `${loc.lat},${loc.lon}` : addr;
@@ -79,7 +79,7 @@
             <span class="ttag cat" style="--tc:${ic.color}">${esc(ic.label)}</span>
           </div>
         </div>
-        <div class="d-amt ${t.amount < 0 ? "in" : ""}">${amt}<small>${esc(t.currency || "USD")}</small>${t.orig_currency ? `<em class="d-orig">${esc(fmtOrig(t.orig_amount, t.orig_currency))}</em>` : ""}</div>
+        <div class="d-amt ${t.amount < 0 ? "in" : ""}">${amt}<small>${esc(t.orig_currency || t.currency || "USD")}</small>${t.orig_currency ? `<em class="d-orig">${esc(txnAmt(t, true))}</em>` : ""}</div>
       </header>`;
 
     // 积分 + 卡片横条

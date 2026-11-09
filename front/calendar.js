@@ -123,21 +123,21 @@
     let body = "";
     if (e.kind === "fee") {
       const f = e.info.fee;
-      body = `<div class="ag-nums"><span><small>${e.est ? "预计年费" : "已扣年费"}</small><b>${fmt(e.info.amount)}</b></span>${e.est ? `<span><small>上次扣费</small><b>${md(f.last.date)}</b></span>` : ""}</div>
+      body = `<div class="ag-nums"><span><small>${e.est ? "预计年费" : "已扣年费"}</small><b>${esc(moneyText(e.info.amount, a))}</b></span>${e.est ? `<span><small>上次扣费</small><b>${md(f.last.date)}</b></span>` : ""}</div>
         <p class="ag-note">${e.est ? (left >= 0 && left <= 45 ? "快到年费日了：可以评估权益是否值、问问保留优惠或降级" : "按上次扣费日推算，以账单为准") : esc(f.last.name)}</p>`;
     } else if (e.kind === "close") {
       const isNext = e.date > lastClosing(a.id, t0) && e.date >= t0 && e.date === nextCloseOf(a);
       if (isNext) {
         const s = cycleStats(a);
-        body = `<div class="ag-nums"><span><small>本期已刷</small><b>${fmt(s.spend)}</b></span>${s.prog ? `<span><small>Pending 积分</small><b style="color:${s.prog.color}">+${esc(R.fmtEarned(s.pts, s.unit))}${s.unit === "cash" ? "" : " " + esc(s.prog.short)}</b></span>` : ""}</div>`;
+        body = `<div class="ag-nums"><span><small>本期已刷</small><b>${esc(moneyText(s.spend, a))}</b></span>${s.prog ? `<span><small>Pending 积分</small><b style="color:${s.prog.color}">+${esc(R.fmtEarned(s.pts, s.unit))}${s.unit === "cash" ? "" : " " + esc(s.prog.short)}</b></span>` : ""}</div>`;
       }
       body += `<p class="ag-note">${e.info.source === "manual" ? "账单日为手动设置" : e.info.source === "auto" ? "账单日来自上期出账日" : "未知账单日，暂按月底"}</p>`;
     } else {
       const d = e.info;
       if (d) {
         body = `<div class="ag-nums">
-          <span><small>账单金额</small><b>${naVal(d, "last_statement_balance", (v) => fmt(v))}</b></span>
-          <span><small>最低还款</small><b>${naVal(d, "minimum_payment_amount", (v) => fmt(v))}</b></span>
+          <span><small>账单金额</small><b>${naVal(d, "last_statement_balance", (v) => esc(moneyText(v, a)))}</b></span>
+          <span><small>最低还款</small><b>${naVal(d, "minimum_payment_amount", (v) => esc(moneyText(v, a)))}</b></span>
         </div>
         <span class="due-chip ${d.level}">${esc(dueLabel(d, left))}</span>`;
       } else {
@@ -184,9 +184,31 @@
     const nf = events(t0, addDays(t0, 120)).find((e) => e.kind === "fee");
     return `<div class="cal-sum">
       ${nc ? `<span><i class="dot close"></i>下个出账 <b>${esc(cardName(nc.a))}</b> ${md(nc.date)}</span>` : ""}
-      ${nf ? `<span><i class="dot fee"></i>下个年费 <b>${esc(cardName(nf.a))}</b> ${md(nf.date)} · ${fmt(nf.info.amount)}</span>` : ""}
-      ${nd ? `<span><i class="dot due"></i>下个还款 <b>${esc(cardName(nd.a))}</b> ${md(nd.date)}${nd.info?.minimum_payment_amount != null ? ` · 最低 ${fmt(nd.info.minimum_payment_amount)}` : ""}</span>` : ""}
+      ${nf ? `<span><i class="dot fee"></i>下个年费 <b>${esc(cardName(nf.a))}</b> ${md(nf.date)} · ${esc(moneyText(nf.info.amount, nf.a))}</span>` : ""}
+      ${nd ? `<span><i class="dot due"></i>下个还款 <b>${esc(cardName(nd.a))}</b> ${md(nd.date)}${nd.info?.minimum_payment_amount != null ? ` · 最低 ${esc(moneyText(nd.info.minimum_payment_amount, nd.a))}` : ""}</span>` : ""}
     </div>`;
+  }
+
+  // 账户页顶部的三张小卡：下个还款 / 下个出账 / 下个年费。点一下打开日历并选中那天
+  function tiles() {
+    const t0 = todayLocal();
+    const up = events(t0, addDays(t0, 60));
+    const nd = up.find((e) => e.kind === "due" && !(e.info?.paid || e.info?.nothing));
+    const nc = up.find((e) => e.kind === "close");
+    const nf = events(t0, addDays(t0, 120)).find((e) => e.kind === "fee");
+    const rel = (d) => { const n = diff(t0, d); return n === 0 ? "今天" : n === 1 ? "明天" : `${n} 天后`; };
+    const tile = (e, kind, label, extra) => e
+      ? `<button type="button" class="up-tile ${kind}${diff(t0, e.date) <= 3 ? " soon" : ""}" data-cal-date="${e.date}">
+          <span class="up-k"><i class="dot ${kind}"></i>${label}</span>
+          <span class="up-d"><b>${md(e.date)}</b><small>${rel(e.date)}</small></span>
+          <span class="up-c">${RT_CARDS.face(e.a, "xs")}<span>${esc(cardName(e.a))}</span></span>
+          <span class="up-x">${extra || "&nbsp;"}</span>
+        </button>`
+      : `<div class="up-tile ${kind} none"><span class="up-k"><i class="dot ${kind}"></i>${label}</span><span class="up-none">近期没有</span></div>`;
+    const dueX = nd?.info?.minimum_payment_amount != null ? `最低 <b>${esc(moneyText(nd.info.minimum_payment_amount, nd.a))}</b>` : "";
+    const closeX = nc ? `本期已刷 <b>${esc(moneyText(cycleStats(nc.a).spend, nc.a))}</b>` : "";
+    const feeX = nf ? `${nf.est ? "约" : ""} <b>${esc(moneyText(nf.info.amount, nf.a))}</b>` : "";
+    return `<div class="up-tiles">${tile(nd, "due", "下个还款", dueX)}${tile(nc, "close", "下个出账", closeX)}${tile(nf, "fee", "下个年费", feeX)}</div>`;
   }
 
   // ------------------------------------------------------------ 联动高亮：列表 ↔ 日历
@@ -324,10 +346,12 @@
       </div>`;
   }
 
-  function open() {
+  // date（可选）：打开时直接选中那一天
+  function open(date) {
     const el = shell();
     el.hidden = false;
-    ui.ym = todayLocal().slice(0, 7); ui.sel = null;
+    const d = typeof date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : null;
+    ui.ym = (d || todayLocal()).slice(0, 7); ui.sel = d;
     try { paint(); }
     catch (err) { el.hidden = true; toast(`日历打不开：${err.message}`); console.error(err); return; }
     document.documentElement.classList.add("d-lock");
@@ -351,5 +375,5 @@
     if (e.key === "ArrowRight") el.querySelector('[data-cal-nav="1"]')?.click();
   }, true);
 
-  window.RT_CAL = { open, close, refresh: paint, summary, events, feeInfo };
+  window.RT_CAL = { open, close, refresh: paint, summary, tiles, events, feeInfo };
 })();

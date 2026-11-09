@@ -19,7 +19,8 @@ const EMPTY_REWARDS = () => ({ cards: {}, rules: {}, balances: {}, closing: {}, 
 // ---------------------------------------------------------------- 非美元账户（香港 Amex，港币）
 // 按固定汇率换算成美元：汇总、分析、积分都用美元金额；港币原值留在 orig_amount / orig 里给界面显示
 const FX_PER_USD = { HKD: 7.8 };
-const toUSD = (v, cur) => (typeof v === "number" && FX_PER_USD[cur] ? Math.round((v / FX_PER_USD[cur]) * 100) / 100 : v);
+// 不在这里四舍五入：港卡显示时要乘回港币，保留全精度才能分毫不差（显示时由 fmt 取到分）
+const toUSD = (v, cur) => (typeof v === "number" && FX_PER_USD[cur] ? v / FX_PER_USD[cur] : v);
 const fmtOrig = (v, cur) => (cur === "HKD"
   ? `${v < 0 ? "−" : ""}HK$${Math.abs(v).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
   : fmt(v, cur));
@@ -53,8 +54,24 @@ const normTxn = (t) => (FX_PER_USD[t.currency]
   ? { ...t, amount: toUSD(t.amount, t.currency), currency: "USD", orig_amount: t.amount, orig_currency: t.currency }
   : t);
 // 港币原值的小字（没有换算过的账户返回空）
-const origLine = (a, key, cls = "meta orig") =>
-  a?.orig_currency && typeof a.orig?.[key] === "number" ? `<div class="${cls}">${esc(fmtOrig(a.orig[key], a.orig_currency))}</div>` : "";
+// 港币卡（以及以后的汇丰等香港卡）：主显港币（HK$），美元做小字；其他账户照旧显示美元。
+// x 是任何带 orig_currency 的对象：账户、交易、dueInfo 的结果都可以；usd 是换算后的美元金额
+// trim：整数金额省掉「.00」（额度、可用额度这类整数，窄屏放得下）
+const moneyText = (usd, x, trim = false) => {
+  if (!(x?.orig_currency && typeof usd === "number")) return fmt(usd);
+  const s = fmtOrig(usd * FX_PER_USD[x.orig_currency], x.orig_currency);
+  return trim ? s.replace(/\.00$/, "") : s;
+};
+const money = (usd, x, cls = "usd") => (x?.orig_currency && typeof usd === "number"
+  ? `${esc(moneyText(usd, x))}<small class="${cls}">${esc(fmt(usd))}</small>` : esc(fmt(usd)));
+// 美元小字单独一行（港币卡才有）
+const usdLine = (x, usd, cls = "meta orig") => (x?.orig_currency && typeof usd === "number" ? `<div class="${cls}">${esc(fmt(usd))}</div>` : "");
+// 交易金额带正负号：港币交易默认显示港币，usd=true 时显示美元
+function txnAmt(t, usd = false) {
+  const hk = t.orig_currency && !usd;
+  const v = Math.abs(hk ? t.orig_amount : t.amount);
+  return `${t.amount > 0 ? "−" : "+"}${hk ? fmtOrig(v, t.orig_currency) : fmt(v, usd ? "USD" : t.currency)}`;
+}
 // 香港区旗（Windows 不显示国旗 emoji，所以用 SVG 画）
 const HK_FLAG = `<svg class="flag" viewBox="0 0 30 20" role="img" aria-label="香港"><rect width="30" height="20" rx="2.5" fill="#de2910"/><g fill="#fff" transform="translate(15 10)">${
   [0, 72, 144, 216, 288].map((r) => `<path transform="rotate(${r}) translate(0 -1)" d="M0 0C-3.6-1.4-4.6-4.6-3-7.4c.4 1.8 1.6 2.6 2.7 3C-1.6-5.6-.8-7.6.9-8.3-.5-6.4 1.6-2.4 0 0Z"/>`).join("")}</g></svg>`;
@@ -93,7 +110,7 @@ function paymentsSince(a, since) {
     amount = L.last_payment_amount;
     last = { date: L.last_payment_date, amount: L.last_payment_amount, pending: false };
   }
-  return { amount: Math.round(amount * 100) / 100, last, list };
+  return { amount, last, list };   // 不取整：港卡要换回港币显示
 }
 function dueInfo(a) {
   const L = a?.liability;
@@ -102,21 +119,21 @@ function dueInfo(a) {
   const stmt = L.last_statement_balance ?? 0;
   let pay = L.last_statement_issue_date ? paymentsSince(a, L.last_statement_issue_date) : { amount: 0, last: null, list: [] };
   // 网银给了「月结单尚欠」（香港 Amex）：以它为准，还款交易还没推上来也能判断
-  if (L.remaining_statement_balance != null) pay = { ...pay, amount: Math.max(pay.amount, Math.round((stmt - L.remaining_statement_balance) * 100) / 100) };
+  if (L.remaining_statement_balance != null) pay = { ...pay, amount: Math.max(pay.amount, stmt - L.remaining_statement_balance) };
   const need = Math.min(L.minimum_payment_amount ?? stmt, stmt);
   const nothing = stmt <= 0;
   const fullPaid = !nothing && pay.amount >= stmt - 0.005;
   const paid = !nothing && pay.amount > 0 && pay.amount >= need - 0.005;
-  const remaining = Math.max(0, Math.round((stmt - pay.amount) * 100) / 100);
+  const remaining = stmt - pay.amount > 0.004 ? stmt - pay.amount : 0;
   const level = L.is_overdue && !paid ? "overdue" : paid || nothing ? "paid" : days <= 3 ? "urgent" : days <= 7 ? "soon" : "ok";
-  return { ...L, days, paid, fullPaid, nothing, remaining, pay, level };
+  return { ...L, days, paid, fullPaid, nothing, remaining, pay, level, orig_currency: a.orig_currency || null };
 }
 // 还款状态短文案（账户详情、日历共用）
 function dueLabel(d, left = d.days) {
   if (d.level === "overdue") return "已逾期";
   if (d.nothing) return "本期无需还款";
   if (d.fullPaid) return "已还清";
-  if (d.paid) return `已还最低 · 余 ${fmt(d.remaining)}`;
+  if (d.paid) return `已还最低 · 余 ${moneyText(d.remaining, d)}`;
   return left < 0 ? "已过还款日" : `剩 ${left} 天`;
 }
 // 在日期 ref（含）当天或之前最近的一次账单日；没设账单日时按自然月月底
@@ -356,7 +373,7 @@ function txnRow(t) {
   const title = t.merchant || t.name;
   const a = state.accounts[t.account_id];
   const ic = I.info(t);
-  const amt = t.amount > 0 ? `−${fmt(t.amount, t.currency)}` : `+${fmt(-t.amount, t.currency)}`;
+  const amt = txnAmt(t);
   // 左侧：有品牌 logo 就显示品牌 logo（右下角带类别小圆点），否则显示彩色类别图标
   const srcs = [B.url(t), t.logo].filter(Boolean);
   const brand = srcs.length
@@ -376,7 +393,7 @@ function txnRow(t) {
     </div>
     <div class="right">
       <div class="amt ${t.amount < 0 ? "in" : ""}">${amt}</div>
-      ${t.orig_currency ? `<div class="amt-orig">${esc(fmtOrig(t.orig_amount, t.orig_currency))}</div>` : ""}
+      ${t.orig_currency ? `<div class="amt-orig">${esc(txnAmt(t, true))}</div>` : ""}
       ${earnCell(t)}
     </div>
   </div>`;
@@ -509,7 +526,7 @@ function renderAccounts() {
   const tb = $(".acct-toolbar");
   tb.hidden = !creditAccounts().length;
   if (window.RT_CAL && creditAccounts().length) {
-    $("#acct-sum").innerHTML = RT_CAL.summary();
+    $("#acct-sum").innerHTML = RT_CAL.tiles ? RT_CAL.tiles() : RT_CAL.summary();
     const ico = $(".cal-ico b"); if (ico) ico.textContent = new Date().getDate();
   }
   if (!state.items.length) { $("#account-list").innerHTML = `<div class="empty">还没有连接银行</div>`; return; }
@@ -524,7 +541,7 @@ function renderAccounts() {
           <button class="btn small ghost" data-remove="${esc(it.item_id)}" data-name="${esc(it.institution)}">断开</button>`}
         </div>
       </div>
-      ${it.source === "manual" ? `<div class="manual-note">${HK_FLAG}<span><b>没有通过 Plaid 连接。</b>历史交易来自月结单，新交易在你打开 Amex 网银时由脚本推送；港币按 1 USD = 7.8 HKD 换算成美元显示；没有 MCC，本站不估算积分。点开卡片看详情。</span></div>` : ""}
+      ${it.source === "manual" ? `<div class="manual-note">${HK_FLAG}<span><b>没有通过 Plaid 连接。</b>历史交易来自月结单，新交易在你打开 Amex 网银时由脚本推送；金额以港币显示，美元小字按 1 USD = 7.8 HKD 换算；没有 MCC，本站不估算积分。点开卡片看详情。</span></div>` : ""}
       ${it.error ? `<div class="err">${esc(it.error.code)}：${esc(it.error.message)}</div>` : ""}
       ${it.accounts.map((a) => {
         const name = cardName(a);
@@ -534,9 +551,9 @@ function renderAccounts() {
           ${["credit", "depository", "investment"].includes(a.type) ? `<span class="acct-face">${RT_CARDS.face(state.accounts[a.id] || a, "sm")}</span>` : ""}
           <div class="acct-info"><div class="acct-name">${esc(name)}${a.mask ? ` <span class="mask">··${esc(a.mask)}</span>` : ""}</div><div class="meta">${esc(sub)}</div>${dueChip(state.accounts[a.id] || a)}</div>
           <div class="acct-amt">
-            <div>${a.balance_current != null ? fmt(a.balance_current, a.currency) : "—"}</div>
-            ${origLine(a, "balance_current")}
-            <div class="meta">${a.limit ? "额度 " + fmt(a.limit, a.currency) : ""}${a.orig_currency && typeof a.orig?.limit === "number" ? `<span class="orig"> · ${esc(fmtOrig(a.orig.limit, a.orig_currency))}</span>` : ""}</div>
+            <div>${a.balance_current != null ? esc(moneyText(a.balance_current, a)) : "—"}</div>
+            ${usdLine(a, a.balance_current)}
+            <div class="meta">${a.limit ? "额度 " + esc(moneyText(a.limit, a, true)) : ""}${a.limit && a.orig_currency ? `<span class="orig"> · ${esc(fmt(a.limit))}</span>` : ""}</div>
           </div>
           ${a.type === "credit" && a.limit ? limitBar(a) : ""}
         </div>`;
@@ -949,6 +966,11 @@ function bindRewards() {
     if (window.RT_CAL) RT_CAL.open();
     else toast("日历脚本没加载到，请下拉刷新或清一下浏览器缓存");
   });
+  // 「下个还款 / 出账 / 年费」小卡：打开日历并选中那一天
+  $("#acct-sum").addEventListener("click", (e) => {
+    const t = e.target.closest("[data-cal-date]");
+    if (t && window.RT_CAL) RT_CAL.open(t.dataset.calDate);
+  });
   $("#btn-refresh").addEventListener("click", refreshFromBank);
 
   document.addEventListener("input", (e) => {
@@ -989,9 +1011,9 @@ function dueChip(a) {
   const md = `${+d.next_payment_due_date.slice(5, 7)}/${+d.next_payment_due_date.slice(8)}`;
   const pd = d.pay.last ? `${+d.pay.last.date.slice(5, 7)}/${+d.pay.last.date.slice(8)}` : "";
   const txt = d.level === "overdue" ? "已逾期" : d.nothing ? `本期无需还款` :
-    d.fullPaid ? `已还清 ${fmt(d.pay.amount)}${pd ? ` · ${pd}` : ""}${d.pay.last?.pending ? " · 处理中" : ""}` :
-    d.paid ? `已还最低 · 余 ${fmt(d.remaining)} · ${md} 前` :
-    d.days < 0 ? `还款日 ${md} 已过` : `${md} 还款 · 剩 ${d.days} 天${d.minimum_payment_amount != null ? ` · 最低 ${fmt(d.minimum_payment_amount)}` : ""}`;
+    d.fullPaid ? `已还清 ${moneyText(d.pay.amount, d)}${pd ? ` · ${pd}` : ""}${d.pay.last?.pending ? " · 处理中" : ""}` :
+    d.paid ? `已还最低 · 余 ${moneyText(d.remaining, d)} · ${md} 前` :
+    d.days < 0 ? `还款日 ${md} 已过` : `${md} 还款 · 剩 ${d.days} 天${d.minimum_payment_amount != null ? ` · 最低 ${moneyText(d.minimum_payment_amount, d)}` : ""}`;
   return `<span class="due-chip ${d.level}">${esc(txt)}</span>`;
 }
 
@@ -1003,7 +1025,7 @@ function limitBar(a) {
   const level = pct < 30 ? "ok" : pct < 70 ? "mid" : "high";
   return `<div class="limit ${level}">
     <div class="limit-track"><i style="width:${pct.toFixed(1)}%"></i><span class="mark" title="30% 使用率"></span></div>
-    <div class="limit-nums"><span>已用 ${pct.toFixed(0)}%${level === "high" ? " · 偏高" : ""}</span><span>可用 ${fmt(avail, a.currency)}</span></div>
+    <div class="limit-nums"><span>已用 ${pct.toFixed(0)}%${level === "high" ? " · 偏高" : ""}</span><span>可用 ${esc(moneyText(avail, a, true))}</span></div>
   </div>`;
 }
 
