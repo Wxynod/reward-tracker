@@ -229,11 +229,28 @@ const ROUTES = {
 
   // 不走 Plaid 的账户：脚本把账户 / 账单信息 / 交易推上来。交易按 id 去重：已存在的默认跳过（overwrite: true 才覆盖）。
   // body: { item_id: "manual:<名字>", item?: { institution, region, notice }, accounts?: [...], liabilities?: { <account_id>: {...} },
-  //         transactions?: [...], remove?: [<txn id>], overwrite?: false, replace_pending?: [<account_id>] }
+  //         transactions?: [...], remove?: [<txn id>], overwrite?: false, replace_pending?: [<account_id>], dedupe?: "date_amount" }
+  // dedupe: "date_amount"：id 不同但「同账户、同日期、同金额」的交易按数量去重（网银 3 笔、库里已有 2 笔 → 只补 1 笔）。
+  //   用于不同来源（结单 PDF / 网银）交易描述不一致、没有共同参考号的情况
   // replace_pending：这次带来的是这些账户「完整的」待入账列表，存着但不在列表里的待入账交易（已入账或被撤销）删掉
   // balances：{ <account_id>: { balance_current, balance_available, limit, as_of } } 网银上的实时余额（总结欠 / 可用额度），优先于交易累计
   // liabilities 按字段合并：只更新这次带来的字段，其余（如 APR）保留
   "POST /api/manual/import": async (env, body) => manualImport(env, body),
+  // 网页脚本用：每个账户最后一笔（已入账）交易的日期和笔数。只返回日期，不返回交易内容
+  "POST /api/manual/state": async (env, body) => {
+    const id = String(body.item_id || "");
+    const accounts = await getJSON(env, `accounts:${id}`, []);
+    const store = await getJSON(env, `txns:${id}`, {});
+    const out = {};
+    for (const a of accounts) out[a.id] = { last_date: null, count: 0 };
+    for (const t of Object.values(store)) {
+      if (t.pending || !out[t.account_id]) continue;
+      const o = out[t.account_id];
+      o.count++;
+      if (!o.last_date || t.date > o.last_date) o.last_date = t.date;
+    }
+    return { item_id: id, accounts: out };
+  },
 
   "PUT /api/benefits": async (env, body) => {
     if (!Array.isArray(body.benefits)) throw httpError(400, "benefits must be an array");
@@ -437,7 +454,7 @@ const slimAccount = (a) => ({
 
 // ---------------------------------------------------------------- 手动导入（不走 Plaid）
 
-const INGEST_ROUTES = new Set(["POST /api/manual/import"]);
+const INGEST_ROUTES = new Set(["POST /api/manual/import", "POST /api/manual/state"]);
 const isManual = (item) => item?.source === "manual";
 
 async function verifyIngest(request, env) {
@@ -602,12 +619,26 @@ async function manualImport(env, body) {
   if (list.length > 5000) throw httpError(413, "一次最多 5000 笔交易");
   const store = await getJSON(env, `txns:${id}`, {});
   let added = 0, skipped = 0, updated = 0, removed = 0;
+  // 按「账户|日期|金额」统计库里已有的已入账交易，以及这次要新增的
+  const dkey = (t) => `${t.account_id}|${t.date}|${Math.round(Number(t.amount) * 100)}`;
+  const existing = new Map(), incoming = new Map();
+  if (body.dedupe === "date_amount") {
+    for (const t of Object.values(store)) if (!t.pending) existing.set(dkey(t), (existing.get(dkey(t)) || 0) + 1);
+    for (const t of list) if (t && !t.pending) incoming.set(dkey(t), (incoming.get(dkey(t)) || 0) + 1);
+  }
+  const room = new Map();   // 每个键还能新增几笔 = 这次的笔数 − 库里已有的笔数
   const rejected = [];
   for (const t of list) {
     const c = cleanManualTxn(t, acctIds);
     if (typeof c === "string") { rejected.push({ id: t?.id ?? null, reason: c }); continue; }
     // 已存在的跳过；但待入账的可以被更新（金额 / 状态会变）
     if (store[c.id] && !body.overwrite && !store[c.id].pending) { skipped++; continue; }
+    if (body.dedupe === "date_amount" && !store[c.id] && !c.pending) {
+      const k = dkey(c);
+      if (!room.has(k)) room.set(k, Math.max(0, (incoming.get(k) || 0) - (existing.get(k) || 0)));
+      if (room.get(k) <= 0) { skipped++; continue; }
+      room.set(k, room.get(k) - 1);
+    }
     if (store[c.id]) updated++; else added++;
     store[c.id] = c;
   }

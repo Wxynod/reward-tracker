@@ -413,6 +413,8 @@ def main():
         "item": {"institution": "HSBC HK", "region": "HK", "notice": "月结单 PDF 导入，不经 Plaid"},
         "accounts": accounts, "liabilities": liabilities, "transactions": transactions,
         "overwrite": args.overwrite,
+        # 和网页脚本（scripts/hsbc_hk_push.user.js）推过的交易按「同账户、同日、同金额」点数量去重
+        "dedupe": "date_amount",
     })
     print(f"\n已上传到 {url}：新增 {d['added']}，跳过（已导入）{d['skipped']}，覆盖 {d['updated']}，现有 {d['total']} 笔。")
     if d.get("rejected"):
