@@ -38,6 +38,8 @@ CARDS = {
     "signature": {"HKD": ("hsbc_signature", "HSBC Visa Signature")},
     "easy":      {"HKD": ("hsbc_easy", "HSBC Easy")},
 }
+# 结单里读不到额度的账户（没有结单的 Easy 卡），在这里手动指定
+LIMIT_OVERRIDE = {"hsbc_easy": 10000.0}
 FACE_OF = {"hsbc_everymile": "hsbc_everymile", "hsbc_gold": "hsbc_gold", "hsbc_pulse_hkd": "hsbc_pulse", "hsbc_pulse_cny": "hsbc_pulse",
            "hsbc_red": "hsbc_red", "hsbc_signature": "hsbc_visa_signature", "hsbc_easy": "hsbc_easy"}
 
@@ -278,7 +280,7 @@ def build(statements, cats):
                             "statement_date": s["stmt"],
                         }.items() if v is not None},
                     })
-            limit = last["limit"].get(cur) if last else None
+            limit = last["limit"].get(cur) if last else LIMIT_OVERRIDE.get(acct_id)
             accounts.append({
                 "id": acct_id, "name": name,
                 "official_name": (last or {}).get("type") or name,

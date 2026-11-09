@@ -87,6 +87,8 @@
         <div class="d-card">${a ? RT_CARDS.face(a, "sm") : ""}<div><b>${esc(cardNameMask(a) || "未知账户")}</b><small>${esc(a?.institution || "")}</small></div></div>
         ${e && e.cat !== "none" && e.earned
           ? `<div class="d-earn" style="--brand:${prog.color}"><b>${e.earned > 0 ? "+" : ""}${esc(R.fmtEarned(e.earned, prog.unit))}${prog.unit === "cash" ? "" : " " + esc(prog.short)}</b><small>${esc(R.fmtRate(e.rate, prog.unit))} · ${esc(e.source)}</small></div>`
+          : a && isManual(a) && isHSBC(a)
+            ? `<div class="d-earn none"><b>不估算积分</b><small>汇丰卡 · 本站不估算</small></div>`
           : a && R.PRODUCTS[productOf(a)]?.noEarn
             ? `<div class="d-earn none"><b>不估算积分</b><small>香港卡 · 见 Amex HK Tracker</small></div>`
             : `<div class="d-earn none"><b>不计积分</b><small>${esc(e?.source || "非信用卡消费")}</small></div>`}
@@ -112,11 +114,12 @@
     ].join(""));
 
     const secMerchant = section("商户", [
-      row("商户名", t.merchant ? esc(t.merchant) : t.source === "amex_hk_statement" ? "<small>结单不提供</small>" : "<small>Plaid 未识别</small>"),
+      row("商户名", t.merchant ? esc(t.merchant) : /_statement$/.test(t.source || "") ? "<small>结单不提供</small>" : "<small>Plaid 未识别</small>"),
       row("银行原始描述", esc(d.original_description || t.name)),
       row("外币原始金额", d.foreign ? `${esc(d.foreign.amount)} ${esc(d.foreign.currency)} <small>汇率 ${esc(d.foreign.rate)}</small>` : ""),
       row("优惠", d.offer ? esc(d.offer) : ""),
       row("所属结单", d.statement_date ? `${esc(dateZh(d.statement_date))} 出账` : ""),
+      row("汇丰类别", d.hsbc_category ? esc(d.hsbc_category) : ""),
       row("Amex 参考号", d.reference ? `<code>${esc(d.reference)}</code>` : "", { mono: true }),
       row("网站", t.website ? `<a href="${esc(/^https?:/.test(t.website) ? t.website : "https://" + t.website)}" target="_blank" rel="noopener">${esc(t.website.replace(/^https?:\/\//, ""))} ↗</a>` : ""),
       row("地址", addr ? `${esc(addr)}${loc.store_number ? ` <small>门店 #${esc(loc.store_number)}</small>` : ""}<br><a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapQ)}" target="_blank" rel="noopener">在地图中查看 ↗</a>` : ""),
@@ -124,7 +127,7 @@
     ].join(""));
 
     const secCat = section("分类", [
-      row("MCC", t.mcc ? `<span class="mcc">${esc(t.mcc)}</span> ${esc(mccName(t.mcc) || "")}` : t.source === "amex_hk_statement" ? "<small>香港结单不提供 MCC</small>" : "<small>银行没有提供（Plaid 的 MCC 仍是 beta 字段）</small>"),
+      row("MCC", t.mcc ? `<span class="mcc">${esc(t.mcc)}</span> ${esc(mccName(t.mcc) || "")}` : /_statement$/.test(t.source || "") ? "<small>香港结单不提供 MCC</small>" : "<small>银行没有提供（Plaid 的 MCC 仍是 beta 字段）</small>"),
       row("本站类别", `<span class="dot" style="background:${ic.color}"></span>${esc(ic.label)}`),
       row("Plaid 大类", pfc.primary ? `${esc(PFC_ZH[pfc.primary] || pretty(pfc.primary))} <small>${esc(pfc.primary)}</small>` : (t.category ? esc(t.category) : "")),
       row("Plaid 细类", pfc.detailed ? `${esc(pretty(pfc.detailed.replace(pfc.primary + "_", "")))} <small>${esc(pfc.detailed)}</small>` : ""),

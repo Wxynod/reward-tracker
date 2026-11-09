@@ -26,6 +26,16 @@ const fmtOrig = (v, cur) => (cur === "HKD"
   ? `${v < 0 ? "−" : ""}HK$${Math.abs(v).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
   : fmt(v, cur));
 const isManual = (a) => a?.source === "manual";
+// 手动导入的香港卡按机构区分说明文案：汇丰（月结单 PDF 导入）/ Amex（月结单 CSV + 网银脚本）
+const isHSBC = (x) => /hsbc/i.test(x?.institution || "");
+const fxNote = (cur) => `1 USD = ${FX_PER_USD[cur]} ${cur}`;
+function manualNote(it) {
+  if (isHSBC(it)) {
+    const curs = [...new Set(it.accounts.map((a) => a.orig_currency).filter(Boolean))];
+    return `<b>没有通过 Plaid 连接。</b>交易来自汇丰月结单（PDF）导入，不会自动同步，新结单出来后再导入一次；金额以原币显示，美元小字按 ${curs.map(fxNote).join("、")} 换算；结单没有 MCC，本站不估算汇丰积分。点开卡片看详情。`;
+  }
+  return `<b>没有通过 Plaid 连接。</b>历史交易来自月结单，新交易在你打开 Amex 网银时由脚本推送；金额以港币显示，美元小字按 1 USD = 7.8 HKD 换算；没有 MCC，本站不估算积分。点开卡片看详情。`;
+}
 // 问卷里填 N/A 的账单字段：值换成 null（其余代码按「未知」处理），键名记在 L.na 里，界面显示「没有」
 const naVal = (L, key, f) => (L?.na?.includes(key) ? "没有" : L?.[key] != null ? f(L[key]) : "—");
 const LIAB_MONEY = ["last_statement_balance", "minimum_payment_amount", "last_payment_amount", "remaining_statement_balance"];
@@ -542,7 +552,7 @@ function renderAccounts() {
           <button class="btn small ghost" data-remove="${esc(it.item_id)}" data-name="${esc(it.institution)}">断开</button>`}
         </div>
       </div>
-      ${it.source === "manual" ? `<div class="manual-note">${HK_FLAG}<span><b>没有通过 Plaid 连接。</b>历史交易来自月结单，新交易在你打开 Amex 网银时由脚本推送；金额以港币显示，美元小字按 1 USD = 7.8 HKD 换算；没有 MCC，本站不估算积分。点开卡片看详情。</span></div>` : ""}
+      ${it.source === "manual" ? `<div class="manual-note">${HK_FLAG}<span>${manualNote(it)}</span></div>` : ""}
       ${it.error ? `<div class="err">${esc(it.error.code)}：${esc(it.error.message)}</div>` : ""}
       ${it.accounts.map((a) => {
         const name = cardName(a);

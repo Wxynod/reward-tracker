@@ -186,7 +186,20 @@
     "APR：没有": "APR: None", "数据来源": "Data source", "月结单导入（不经 Plaid）": "Imported statements (not via Plaid)",
     "香港卡：本站不估算积分，季度加赏看 Amex HK Tracker": "Hong Kong card: points not estimated here — see Amex HK Tracker for quarterly bonuses",
     "外币原始金额": "Original foreign amount", "优惠": "Offer", "所属结单": "Statement", "Amex 参考号": "Amex reference",
-    "结单不提供": "Not in statement", "近期没有": "None soon", "最低": "min", "约": "approx.", "香港卡 · 见 Amex HK Tracker": "HK card · see Amex HK Tracker", "不估算积分": "Points not estimated", "香港结单不提供 MCC": "Hong Kong statements don’t include MCC", "经典": "classic",
+    "结单不提供": "Not in statement", "近期没有": "None soon",
+    "这张卡在香港发行，Plaid 连不上：交易来自汇丰月结单（PDF）导入。这样会有以下影响：":
+      "This card is issued in Hong Kong and Plaid can’t connect to it: transactions are imported from HSBC monthly statements (PDF). What this means:",
+    "「同步」「立刻从银行刷新」对它没有作用；新结单出来后，用导入脚本（scripts/import_hsbc_hk.py）再导入一次。":
+      " “Sync” and “Refresh from bank now” don’t affect it; when a new statement arrives, run the import script (scripts/import_hsbc_hk.py) again.",
+    "是期初结余加上已导入的全部交易，截至最近一期结单；之后的新消费不在里面。":
+      " is the opening balance plus all imported transactions, as of the latest statement; newer purchases are not included.",
+    "金额以人民币显示。": "Amounts are shown in RMB.",
+    "Pulse 是双币卡：": "Pulse is a dual-currency card:",
+    "港币、人民币两个子账户分开出账、分开还款，所以这里是两个账户。": " its HKD and RMB sub-accounts are billed and repaid separately, so they appear as two accounts.",
+    "结单没有 MCC，": "Statements have no MCC,",
+    "类别按商户名归入汇丰的日常交易分类；本站不估算汇丰积分（RewardCash / 里数）。": " so categories follow HSBC’s everyday spending categories by merchant name; HSBC rewards (RewardCash / miles) are not estimated here.",
+    "（还款日、最低还款、APR）取自最近一期结单。": " (due date, minimum payment, APR) come from the latest statement.",
+    "汇丰卡 · 本站不估算": "HSBC card · not estimated here", "汇丰类别": "HSBC category", "最低": "min", "约": "approx.", "香港卡 · 见 Amex HK Tracker": "HK card · see Amex HK Tracker", "不估算积分": "Points not estimated", "香港结单不提供 MCC": "Hong Kong statements don’t include MCC", "经典": "classic",
   };
 
   // ---------------------------------------------------------------- 词组（拆段后仍有中文时按最长优先替换）
@@ -290,6 +303,9 @@
     R("记得在 (\\S+) 前激活", (_, d) => `activate by ${d}`),
     R("上次同步：(.+)", (_, d) => `Last synced: ${d}`),
     R("上次导入：(.+)", (_, d) => `Last imported: ${d}`),
+    R("交易来自汇丰月结单（PDF）导入，不会自动同步，新结单出来后再导入一次；金额以原币显示，美元小字按 (.+) 换算；结单没有 MCC，本站不估算汇丰积分。点开卡片看详情。",
+      (_, r) => `Transactions are imported from HSBC monthly statements (PDF) and don’t sync automatically; import again when a new statement arrives. Amounts are in their original currency, with USD in small print at ${r.replace(/、/g, ", ")}. No MCC, and HSBC rewards are not estimated. Open a card for details.`),
+    R("美元小字和各种汇总按固定汇率 (1 USD = [\\d.]+ \\w+) 换算，和汇丰实际入账汇率无关。", (_, r) => ` USD figures and totals use a fixed ${r}, independent of HSBC’s actual rates.`),
     R("取自 Amex 网银首页（總結欠 / 可用信用額），打开网银时更新，最近一次是 (.+)。", (_, d) => ` come from the Amex online banking home page (total balance / available credit) and update when you open it; last updated ${d}.`),
     R("取自 Amex 网银首页（總結欠 / 可用信用額），打开网银时更新；还没抓到过时，欠款按已导入交易累计。", () => " come from the Amex online banking home page and update when you open it; until then the balance is the running total of imported transactions."),
     R("账单数据来自 Amex 网银 · (.+)", (_, d) => `Statement data from Amex online banking · ${d}`),

@@ -40,7 +40,19 @@
       <div class="ad-chooser ${faceOpen ? "open" : ""}" data-ad-chooser>${faceOpen ? RT_CARDS.chooserHTML(a) : ""}</div>`;
 
     // 不走 Plaid 的账户：说明数据从哪来、有哪些影响
-    const manual = isManual(a) ? `<section class="ad-sec ad-manual">
+    const curName = { HKD: "港币", CNY: "人民币" }[a.orig_currency] || a.orig_currency || "美元";
+    const manual = isManual(a) && isHSBC(a) ? `<section class="ad-sec ad-manual">
+        <h4>${regionTag(a.region)}没有通过 Plaid 连接</h4>
+        <p>这张卡在香港发行，Plaid 连不上：交易来自汇丰月结单（PDF）导入。这样会有以下影响：</p>
+        <ul>
+          <li><b>不会自动同步。</b>「同步」「立刻从银行刷新」对它没有作用；新结单出来后，用导入脚本（scripts/import_hsbc_hk.py）再导入一次。</li>
+          <li><b>当前欠款</b>是期初结余加上已导入的全部交易，截至最近一期结单；之后的新消费不在里面。</li>
+          <li><b>金额以${curName}显示。</b>美元小字和各种汇总按固定汇率 ${a.orig_currency ? fxNote(a.orig_currency) : ""} 换算，和汇丰实际入账汇率无关。</li>
+          ${/^hsbc_pulse/.test(a.id) ? `<li><b>Pulse 是双币卡：</b>港币、人民币两个子账户分开出账、分开还款，所以这里是两个账户。</li>` : ""}
+          <li><b>结单没有 MCC，</b>类别按商户名归入汇丰的日常交易分类；本站不估算汇丰积分（RewardCash / 里数）。</li>
+          <li><b>账单信息</b>（还款日、最低还款、APR）取自最近一期结单。</li>
+        </ul>
+      </section>` : isManual(a) ? `<section class="ad-sec ad-manual">
         <h4>${regionTag(a.region)}没有通过 Plaid 连接</h4>
         <p>这张卡在香港发行，Plaid 连不上：历史交易来自 Amex 月结单（CSV），新交易在你打开 Amex 网银时由 Tampermonkey 脚本推送。这样会有以下影响：</p>
         <ul>
@@ -97,7 +109,7 @@
         const st = it?.liab_status;
         bill = `<section class="ad-sec ad-empty">
           <h4>账单与还款</h4>
-          ${isManual(a) ? `<p>还没有账单信息。运行导入脚本（scripts/import_amex_hk.mjs）后会显示。</p>`
+          ${isManual(a) ? `<p>还没有账单信息。运行导入脚本（${isHSBC(a) ? "scripts/import_hsbc_hk.py" : "scripts/import_amex_hk.mjs"}）后会显示。</p>`
             : st === "consent_required"
             ? `<p>这家银行还没授权账单信息。授权后会自动显示还款日、最低还款、APR，并自动设好账单日（走更新模式，不占新连接名额）。</p><button class="btn primary small" data-liab="${esc(it.item_id)}">授权账单信息</button>`
             : st === "unsupported" ? `<p>这家银行不通过 Plaid 提供账单信息。</p>`
