@@ -48,6 +48,77 @@
     if (value == null || value === "") return "";
     return `<div class="d-row${opts.mono ? " mono" : ""}"><dt>${label}</dt><dd>${value}</dd></div>`;
   }
+  // ---------------------------------------------------------------- 地图（Leaflet + OpenStreetMap，打开交易详情时才加载）
+  // Plaid 给了经纬度就直接用；只有地址（如香港结单）时用 Nominatim 查一次，结果存在本机，不重复查（官方要求：≤1 次/秒、要缓存）
+  const GEO_KEY = "rt_geo_v1";
+  const LEAFLET = "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/";
+  let leafletP = null, curMap = null, lastGeo = 0;
+  function loadLeaflet() {
+    if (window.L?.map) return Promise.resolve(window.L);
+    return leafletP ||= new Promise((res, rej) => {
+      const css = document.createElement("link");
+      css.rel = "stylesheet"; css.href = LEAFLET + "leaflet.min.css";
+      document.head.appendChild(css);
+      const s = document.createElement("script");
+      s.src = LEAFLET + "leaflet.min.js";
+      s.onload = () => res(window.L);
+      s.onerror = () => { leafletP = null; rej(new Error("leaflet")); };
+      document.head.appendChild(s);
+    });
+  }
+  const geoCache = () => { try { return JSON.parse(localStorage.getItem(GEO_KEY) || "{}"); } catch { return {}; } };
+  const geoSave = (k, v) => { try { const c = geoCache(); c[k] = v; localStorage.setItem(GEO_KEY, JSON.stringify(c)); } catch { /* 隐私模式 */ } };
+  // 从完整地址到区域逐级放宽：去掉铺位 / 楼层，再只留后几段
+  function geoQueries(addr) {
+    const parts = addr.split(/\s*,\s*/).filter(Boolean);
+    const unit = /^(shop|unit|flat|rm|room|suite|kiosk|stall|level|floor|lg|ug|[gb]\/?f|\d+\/?f\b|no\.?\s*\d)/i;
+    const clean = parts.filter((p) => !unit.test(p));
+    const out = [addr, clean.join(", ")];
+    if (clean.length > 2) {
+      const w = clean[0].split(/\s+/);
+      if (w.length > 1) out.push([w[w.length - 1], ...clean.slice(1)].join(", "));
+    }
+    out.push(clean.slice(-2).join(", "));
+    return [...new Set(out)].filter((q) => q && q.length > 3).slice(0, 4);
+  }
+  async function geocode(addr) {
+    const c = geoCache()[addr];
+    if (c && (c.lat != null || Date.now() - c.at < 30 * 864e5)) return c;
+    const qs = geoQueries(addr);
+    for (let i = 0; i < qs.length; i++) {
+      const wait = lastGeo + 1100 - Date.now();
+      if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+      lastGeo = Date.now();
+      try {
+        const r = await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&q=${encodeURIComponent(qs[i])}`);
+        const hit = r.ok ? (await r.json())[0] : null;
+        if (hit) { const v = { lat: +hit.lat, lon: +hit.lon, rough: i >= qs.length - 1 && qs.length > 1, at: Date.now() }; geoSave(addr, v); return v; }
+      } catch { return null; }   // 网络问题：不缓存，下次再试
+    }
+    const miss = { lat: null, at: Date.now() };
+    geoSave(addr, miss);
+    return miss;
+  }
+  async function initMap(box) {
+    if (curMap) { curMap.remove(); curMap = null; }
+    if (!box) return;
+    const note = (txt) => { box.innerHTML = `<div class="d-map-note">${txt}</div>`; };
+    let pos = box.dataset.lat ? { lat: +box.dataset.lat, lon: +box.dataset.lon } : null;
+    try {
+      const [Lf, g] = await Promise.all([loadLeaflet(), pos ? pos : geocode(box.dataset.addr)]);
+      if (!box.isConnected) return;
+      if (!g || g.lat == null) return note(g ? "找不到这个地址的位置" : "暂时连不上地图服务");
+      pos = g;
+      box.innerHTML = "";
+      const map = Lf.map(box, { scrollWheelZoom: false, attributionControl: true }).setView([pos.lat, pos.lon], pos.rough ? 14 : 17);
+      Lf.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>' }).addTo(map);
+      Lf.circleMarker([pos.lat, pos.lon], { radius: 8, color: "#fff", weight: 2, fillColor: "#a3312a", fillOpacity: 0.95 }).addTo(map);
+      if (pos.rough) box.insertAdjacentHTML("beforeend", `<span class="d-map-tag">大致位置</span>`);
+      curMap = map;
+      setTimeout(() => box.isConnected && map.invalidateSize(), 320);
+    } catch { if (box.isConnected) note("地图加载失败"); }
+  }
+
   function section(title, body, extra = "") {
     return body.trim() ? `<section class="d-sec ${extra}"><h4>${title}</h4><dl>${body}</dl></section>` : "";
   }
@@ -126,6 +197,10 @@
       row("Plaid 商户 ID", d.merchant_entity_id ? `<code>${esc(d.merchant_entity_id)}</code>` : "", { mono: true }),
     ].join(""));
 
+    const mapBox = addr || (loc.lat != null && loc.lon != null)
+      ? `<div class="d-map" data-addr="${esc(addr)}"${loc.lat != null && loc.lon != null ? ` data-lat="${loc.lat}" data-lon="${loc.lon}"` : ""}><div class="d-map-note">正在定位…</div></div>` : "";
+    const secMerchantMap = mapBox ? secMerchant.replace(/<\/section>$/, `${mapBox}</section>`) : secMerchant;
+
     const secCat = section("分类", [
       row("MCC", t.mcc ? `<span class="mcc">${esc(t.mcc)}</span> ${esc(mccName(t.mcc) || "")}` : /_statement$/.test(t.source || "") ? "<small>香港结单不提供 MCC</small>" : "<small>银行没有提供（Plaid 的 MCC 仍是 beta 字段）</small>"),
       row("本站类别", `<span class="dot" style="background:${ic.color}"></span>${esc(ic.label)}`),
@@ -163,7 +238,7 @@
         <pre>${esc(raw)}</pre>
       </details>`;
 
-    return head + strip + timeline + `<div class="d-grid">${secTxn}${secMerchant}${secCat}${secPay}</div>` + secCp + secEarn + secRaw;
+    return head + strip + timeline + `<div class="d-grid">${secTxn}${secMerchantMap}${secCat}${secPay}</div>` + secCp + secEarn + secRaw;
   }
 
   // ------------------------------------------------------------ 打开 / 关闭
@@ -229,6 +304,7 @@
     const el = shell();
     el.querySelector(".d-body").innerHTML = content(t);
     el.querySelector(".d-body").scrollTop = 0;
+    initMap(el.querySelector(".d-map"));
     const ids = listIds(), i = ids.indexOf(id);
     el.querySelector(".d-pos").textContent = i >= 0 ? `${i + 1} / ${ids.length}` : "";
     el.querySelector('[data-step="-1"]').disabled = i <= 0;

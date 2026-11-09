@@ -1455,3 +1455,10 @@ html[lang="en"] .brand h1, html[lang="en"] .login-card h1 { letter-spacing: .02e
   .ad-stats > div { min-width: 0; }
   .ad-stats b { font-size: 15.5px; letter-spacing: -.01em; overflow-wrap: anywhere; }
 }
+
+/* 交易详情里的地图（Leaflet + OpenStreetMap） */
+.d-map { position: relative; z-index: 0; height: 200px; margin-top: 10px; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: #ece6da; }
+.d-map-note { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); font-size: 12px; }
+.d-map-tag { position: absolute; left: 8px; top: 8px; z-index: 500; background: rgba(255, 255, 255, .92); border: 1px solid var(--line); border-radius: 6px; padding: 1px 7px; font-size: 11px; color: var(--muted); }
+.d-map .leaflet-control-attribution { font-size: 10px; }
+@media (max-width: 560px) { .d-map { height: 180px; } }
