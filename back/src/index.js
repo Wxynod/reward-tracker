@@ -619,7 +619,7 @@ async function manualImport(env, body) {
     for (const a of body.accounts.slice(0, 20)) {
       const c = cleanManualAccount(a), old = byId.get(c.id);
       // 重新导入结单时保留网银快照
-      if (old?.balance_as_of && !c.balance_as_of) Object.assign(c, { balance_current: old.balance_current, balance_available: old.balance_available, balance_as_of: old.balance_as_of });
+      if (old?.balance_as_of && !c.balance_as_of) Object.assign(c, { balance_current: old.balance_current, balance_available: old.balance_available, balance_as_of: old.balance_as_of, limit: old.limit ?? c.limit });
       byId.set(c.id, c);
     }
     accounts = [...byId.values()];
@@ -643,7 +643,14 @@ async function manualImport(env, body) {
       if (!acctIds.has(aid)) throw httpError(400, `账单信息里的账户 ${aid} 不存在`);
       const c = cleanManualLiability(L);
       if (!c) continue;
-      const merged = { ...(liab[aid] || {}) };
+      const old = liab[aid];
+      // 已有网银快照（带 as_of）时，结单导入不能用同一期或更早的结单把它盖回去
+      if (old?.as_of && !c.as_of && (!c.last_statement_issue_date || c.last_statement_issue_date <= (old.last_statement_issue_date || ""))) {
+        const keep = new Set(["aprs", "due_day"]);   // 网银没有的字段（APR 等）仍按结单更新
+        for (const k of Object.keys(c)) if (!keep.has(k) || !Object.hasOwn(L, k)) delete L[k];
+        if (!Object.keys(L).length) continue;
+      }
+      const merged = { ...(old || {}) };
       for (const k of Object.keys(c)) if (Object.hasOwn(L, k)) merged[k] = c[k];
       liab[aid] = merged;
     }

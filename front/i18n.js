@@ -191,8 +191,10 @@
     "香港卡：本站不估算积分，季度加赏看 Amex HK Tracker": "Hong Kong card: points not estimated here — see Amex HK Tracker for quarterly bonuses",
     "外币原始金额": "Original foreign amount", "优惠": "Offer", "所属结单": "Statement", "Amex 参考号": "Amex reference",
     "结单不提供": "Not in statement", "近期没有": "None soon",
-    "这张卡在香港发行，Plaid 连不上：交易来自汇丰月结单（PDF）导入。这样会有以下影响：":
-      "This card is issued in Hong Kong and Plaid can’t connect to it: transactions are imported from HSBC monthly statements (PDF). What this means:",
+    "这张卡在香港发行，Plaid 连不上：账户信息和新交易在你打开汇丰网银时由 Tampermonkey 脚本推送，更早的交易来自月结单（PDF）导入。这样会有以下影响：":
+      "This card is issued in Hong Kong and Plaid can’t connect to it: account details and new transactions are pushed by a Tampermonkey script when you open HSBC online banking; older transactions come from monthly statements (PDF). What this means:",
+    "「同步」「立刻从银行刷新」对它没有作用；只有打开汇丰网银时才会更新。": " “Sync” and “Refresh from bank now” don’t affect it; it only updates when you open HSBC online banking.",
+    "（上期结欠、还款日、最低还款）取自汇丰网银；APR 网银不提供，取自最近一期结单。": " (last statement balance, due date, minimum payment) come from HSBC online banking; APR isn’t shown there, so it comes from the latest statement.",
     "「同步」「立刻从银行刷新」对它没有作用；新结单出来后，用导入脚本（scripts/import_hsbc_hk.py）再导入一次。":
       " “Sync” and “Refresh from bank now” don’t affect it; when a new statement arrives, run the import script (scripts/import_hsbc_hk.py) again.",
     "是期初结余加上已导入的全部交易，截至最近一期结单；之后的新消费不在里面。":
@@ -307,8 +309,10 @@
     R("记得在 (\\S+) 前激活", (_, d) => `activate by ${d}`),
     R("上次同步：(.+)", (_, d) => `Last synced: ${d}`),
     R("上次导入：(.+)", (_, d) => `Last imported: ${d}`),
-    R("交易来自汇丰月结单（PDF）导入，不会自动同步，新结单出来后再导入一次；金额以原币显示，美元小字按 (.+) 换算；结单没有 MCC，本站不估算汇丰积分。点开卡片看详情。",
-      (_, r) => `Transactions are imported from HSBC monthly statements (PDF) and don’t sync automatically; import again when a new statement arrives. Amounts are in their original currency, with USD in small print at ${r.replace(/、/g, ", ")}. No MCC, and HSBC rewards are not estimated. Open a card for details.`),
+    R("余额、额度和账单信息取自汇丰网银，交易来自网银和月结单（PDF），都在你打开汇丰网银时由脚本推送；金额以原币显示，美元小字按 (.+) 换算；结单没有 MCC，本站不估算汇丰积分。点开卡片看详情。",
+      (_, r) => `Balances, limits and statement details come from HSBC online banking; transactions come from online banking and monthly statements (PDF). A script pushes them whenever you open HSBC online banking. Amounts are in their original currency, with USD in small print at ${r.replace(/、/g, ", ")}. No MCC, and HSBC rewards are not estimated. Open a card for details.`),
+    R("取自汇丰网银（戶口結餘 / 可用信用額），最近一次是 (.+)。戶口結餘不含待处理交易，负数表示有溢缴。", (_, d) => ` come from HSBC online banking (account balance / available credit); last updated ${d}. The account balance excludes pending transactions; a negative balance means a credit.`),
+    R("取自汇丰网银（戶口結餘 / 可用信用額），还没抓到过，暂时按期初结余加已导入交易累计。戶口結餘不含待处理交易，负数表示有溢缴。", () => " come from HSBC online banking (account balance / available credit); not captured yet, so for now it is the opening balance plus imported transactions. The account balance excludes pending transactions; a negative balance means a credit."),
     R("美元小字和各种汇总按固定汇率 (1 USD = [\\d.]+ \\w+) 换算，和汇丰实际入账汇率无关。", (_, r) => ` USD figures and totals use a fixed ${r}, independent of HSBC’s actual rates.`),
     R("取自 Amex 网银首页（總結欠 / 可用信用額），打开网银时更新，最近一次是 (.+)。", (_, d) => ` come from the Amex online banking home page (total balance / available credit) and update when you open it; last updated ${d}.`),
     R("取自 Amex 网银首页（總結欠 / 可用信用額），打开网银时更新；还没抓到过时，欠款按已导入交易累计。", () => " come from the Amex online banking home page and update when you open it; until then the balance is the running total of imported transactions."),

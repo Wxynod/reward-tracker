@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         HSBC HK → 记账本 · 信用卡交易推送
 // @namespace    local.hsbc-hk-ledger-push
-// @version      1.1.0
-// @description  在汇丰香港网银里读取各张信用卡的已入账交易，推送到记账本（Reward Tracker）Worker。每张卡记住上次同步到的日期，下次从那天开始；待入账交易不推。
+// @version      1.2.0
+// @description  在汇丰香港网银里读取各张信用卡的余额、额度、账单信息和已入账交易，推送到记账本（Reward Tracker）Worker。账户信息以网银为准；交易每张卡记住上次同步到的日期，下次从那天开始；待入账交易不推。
 // @match        https://www.hsbc.com.hk/*
 // @run-at       document-start
 // @noframes
@@ -26,6 +26,11 @@
 //    （描述写法不同），由 Worker 按「同账户、同日、同金额」点数量去重（dedupe: "date_amount"）。
 // 6. 推送成功后，把起点改成这张卡最后一笔已入账交易的日期；若还有更早的待入账交易，就用最早那笔待入账的日期
 //    （待入账入账后日期不变，不这样会漏）。
+// 8. 账户信息（1.2.0 起）：每张卡再读一次网银的卡片详情接口（和页面打开卡片时用的同一个），
+//    余额 = 戶口結餘（ledgerBalance，已入账，负数 = 有溢缴），可用额度 / 信用额度照抄网银；
+//    账单信息 = 上期结单日、结单结欠、结单最低还款、到期日、上次还款额、是否逾期。
+//    作为快照推给记账本（balances / liabilities 带 as_of），记账本优先显示快照，不再用「期初结余 + 交易累计」估算。
+//    某张卡的详情读失败只跳过这张卡的账户信息，不影响交易同步。
 // 7. 类别：先按规则（还款 / 返现 / 年费），再按商户名查对照表（来自 hsbc_hk_statements/merchant_categories.csv），
 //    查不到用 MCC 兜底，都不行就是 Unclassified。MCC 也一并存进记账本。
 //
@@ -53,6 +58,8 @@
 
   const API_ACCOUNTS = '/api/mmf-cust-accounts--hk-hbap-banking-prod-proxy/v1/accounts/domestic';
   const API_TXNS = '/api/mmf-account-transactions--hk-hbap-prod-proxy/v2/transactions';
+  // 卡片详情：路径末尾是「产品代码-账户号码」（账户号码是账户列表里那串加密的 accountNumber）
+  const API_CARD = '/api/mmf-cust-accounts-details--hk-hbap-banking-prod-proxy/v1/accounts/credit-cards/';
 
   const cfg = {
     get url() { return (GM_getValue(KEY + 'url', DEFAULT_URL) || DEFAULT_URL).replace(/\/+$/, ''); },
@@ -232,6 +239,37 @@
     return out;
   }
 
+  // ---------------------------------------------------------------- 账户信息（余额 / 额度 / 账单）
+  const amt = (m, cur) => {
+    const v = Number(m?.amount);
+    if (!m || !Number.isFinite(v)) return null;
+    if (m.currencyCode && cur && m.currencyCode !== cur) return null;   // 币种对不上就不用
+    return Math.round(v * 100) / 100;
+  };
+  const isDate = (s) => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s);
+  // 卡片详情 → 记账本的 balances / liabilities。lastPayDate：网银交易里最近一笔同金额还款的日期（接口只给金额）
+  function accountInfo(d, cur, payments) {
+    const asOf = new Date().toISOString();
+    const bal = {
+      balance_current: amt(d.ledgerBalance, cur),
+      balance_available: amt(d.availableCredit, cur),
+      limit: amt(d.creditLimit, cur),
+      as_of: asOf,
+    };
+    if (bal.balance_current == null) return null;
+    const st = d.lastStatementCycle || {};
+    const lastPay = amt(d.lastPaymentAmount, cur);
+    const payTxn = lastPay != null ? payments.find((t) => Math.abs(-t.amount - lastPay) < 0.005) : null;
+    const L = { as_of: asOf, source: 'hsbc_hk_web' };
+    if (isDate(st.statementDate)) { L.last_statement_issue_date = st.statementDate; L.statement_day = Number(st.statementDate.slice(8, 10)); }
+    const sb = amt(st.statementBalance, cur); if (sb != null) L.last_statement_balance = sb;
+    const sm = amt(st.statementMinimumPaymentDue, cur); if (sm != null) L.minimum_payment_amount = sm;
+    if (isDate(d.nextPaymentDueDate)) L.next_payment_due_date = d.nextPaymentDueDate;
+    if (lastPay != null) { L.last_payment_amount = lastPay; L.last_payment_date = payTxn ? payTxn.date : null; }
+    const od = amt(d.overdueBalance, cur); if (od != null) L.is_overdue = od > 0;
+    return { bal, L };
+  }
+
   // ---------------------------------------------------------------- 主流程
   let running = false;
   async function sync({ manual = false } = {}) {
@@ -265,7 +303,7 @@
       }
 
       const today = hkToday();
-      const all = [], plan = {};
+      const all = [], plan = {}, balances = {}, liabilities = {}, infoFail = [];
       for (const c of cards) {
         const start = wm[c.id];
         let from = maxDate(start, addDays(today, -LOOKBACK_DAYS));
@@ -291,11 +329,28 @@
         next = maxDate(next, start);   // 起点只往后推，不往前退
         plan[c.id] = { start, next, n: txns.length, pending: pend.length };
         all.push(...txns);
+
+        // 账户信息：失败只跳过这张卡，交易照常推
+        try {
+          const r = await hsbcGet(API_CARD + `${c.a.accountIdentifier.productCategoryCode}-${c.a.accountIdentifier.accountNumber}`);
+          // 还款记录：这次读到的网银交易（含起点之前的，只用来找上次还款日期）
+          const payments = convert(got.filter((x) => x.transactionStatus === 'HISTORIC'), c.id, c.currency)
+            .filter((t) => t.amount < 0 && t.category === 'LOAN_PAYMENTS').sort((a, b) => (a.date < b.date ? 1 : -1));
+          const info = r?.creditCardAccountDetail ? accountInfo(r.creditCardAccountDetail, c.currency, payments) : null;
+          if (!info) throw new Error('卡片详情里没有余额');
+          balances[c.id] = info.bal;
+          liabilities[c.id] = info.L;
+          plan[c.id].balance = info.bal.balance_current;
+        } catch (e) {
+          console.warn(`[记账本] ${NAMES[c.id]} 账户信息读取失败`, e);
+          infoFail.push(NAMES[c.id]);
+        }
       }
 
       const d = await ledger('/api/manual/import', {
         item_id: ITEM_ID, item: { institution: 'HSBC HK', region: 'HK' },
         transactions: all, dedupe: 'date_amount',
+        balances, liabilities,
       });
       if (d.rejected?.length) throw new Error(`${d.rejected.length} 笔交易被拒，同步起点已保留：${d.rejected[0].reason}`);
       const wm2 = getWM();
@@ -304,8 +359,9 @@
       GM_setValue(KEY + 'last', { at: Date.now(), plan, result: { added: d.added, skipped: d.skipped, rejected: d.rejected?.length || 0, total: d.total } });
 
       const per = Object.entries(plan).filter(([, p]) => p.n || p.pending).map(([id, p]) => `${NAMES[id]} ${p.n}${p.pending ? `（另有 ${p.pending} 笔待入账未推）` : ''}`).join('、');
-      if (d.added) toast(`记账本：新增 ${d.added} 笔，已存在跳过 ${d.skipped} 笔。${per ? `读取：${per}` : ''}`, 'good', 8000);
-      else toast(`记账本：没有新交易（读取 ${all.length} 笔都已存在）`, 'quiet');
+      const info = `更新了 ${Object.keys(balances).length} 张卡的余额和账单信息${infoFail.length ? `（${infoFail.join('、')} 读取失败）` : ''}`;
+      if (d.added) toast(`记账本：新增 ${d.added} 笔，已存在跳过 ${d.skipped} 笔；${info}。${per ? `读取：${per}` : ''}`, infoFail.length ? 'warn' : 'good', 8000);
+      else toast(`记账本：没有新交易（读取 ${all.length} 笔都已存在）；${info}`, infoFail.length ? 'warn' : 'quiet', 6000);
     } catch (e) {
       console.error('[记账本]', e);
       toast(`记账本同步失败：${e.message}`, 'error', 8000);

@@ -43,14 +43,14 @@
     const curName = { HKD: "港币", CNY: "人民币" }[a.orig_currency] || a.orig_currency || "美元";
     const manual = isManual(a) && isHSBC(a) ? `<section class="ad-sec ad-manual">
         <h4>${regionTag(a.region)}没有通过 Plaid 连接</h4>
-        <p>这张卡在香港发行，Plaid 连不上：交易来自汇丰月结单（PDF）导入。这样会有以下影响：</p>
+        <p>这张卡在香港发行，Plaid 连不上：账户信息和新交易在你打开汇丰网银时由 Tampermonkey 脚本推送，更早的交易来自月结单（PDF）导入。这样会有以下影响：</p>
         <ul>
-          <li><b>不会自动同步。</b>「同步」「立刻从银行刷新」对它没有作用；新结单出来后，用导入脚本（scripts/import_hsbc_hk.py）再导入一次。</li>
-          <li><b>当前欠款</b>是期初结余加上已导入的全部交易，截至最近一期结单；之后的新消费不在里面。</li>
+          <li><b>不会自动同步。</b>「同步」「立刻从银行刷新」对它没有作用；只有打开汇丰网银时才会更新。</li>
+          <li><b>当前欠款、可用额度、还款日、最低还款</b>取自汇丰网银（戶口結餘 / 可用信用額），${a.balance_as_of ? `最近一次是 ${esc(new Date(a.balance_as_of).toLocaleString("zh-CN"))}` : "还没抓到过，暂时按期初结余加已导入交易累计"}。戶口結餘不含待处理交易，负数表示有溢缴。</li>
           <li><b>金额以${curName}显示。</b>${a.fx ? "消费按交易日参考汇率折算，未偿欠款按加权成本折算，余额快照按快照日折算。" : `美元小字和各种汇总按固定汇率 ${a.orig_currency ? fxNote(a.orig_currency) : ""} 换算，和汇丰实际入账汇率无关。`}</li>
           ${/^hsbc_pulse/.test(a.id) ? `<li><b>Pulse 是双币卡：</b>港币、人民币两个子账户分开出账、分开还款，所以这里是两个账户。</li>` : ""}
           <li><b>结单没有 MCC，</b>类别按商户名归入汇丰的日常交易分类；本站不估算汇丰积分（RewardCash / 里数）。</li>
-          <li><b>账单信息</b>（还款日、最低还款、APR）取自最近一期结单。</li>
+          <li><b>账单信息</b>（上期结欠、还款日、最低还款）取自汇丰网银；APR 网银不提供，取自最近一期结单。</li>
         </ul>
       </section>` : isManual(a) ? `<section class="ad-sec ad-manual">
         <h4>${regionTag(a.region)}没有通过 Plaid 连接</h4>

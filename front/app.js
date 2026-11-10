@@ -32,7 +32,7 @@ const fxNote = (cur) => `1 USD = ${FX_PER_USD[cur]} ${cur}`;
 function manualNote(it) {
   if (isHSBC(it)) {
     const rates = new Set(it.accounts.filter(a => a.orig_currency).map(a => a.fx ? "ECB USD/CNY" : fxNote(a.orig_currency)));
-    return `<b>没有通过 Plaid 连接。</b>交易来自汇丰月结单（PDF）导入，不会自动同步，新结单出来后再导入一次；金额以原币显示，美元小字按 ${[...rates].join("、")} 换算；结单没有 MCC，本站不估算汇丰积分。点开卡片看详情。`;
+    return `<b>没有通过 Plaid 连接。</b>余额、额度和账单信息取自汇丰网银，交易来自网银和月结单（PDF），都在你打开汇丰网银时由脚本推送；金额以原币显示，美元小字按 ${[...rates].join("、")} 换算；结单没有 MCC，本站不估算汇丰积分。点开卡片看详情。`;
   }
   return `<b>没有通过 Plaid 连接。</b>历史交易来自月结单，新交易在你打开 Amex 网银时由脚本推送；金额以港币显示，美元小字按 1 USD = 7.8 HKD 换算；没有 MCC，本站不估算积分。点开卡片看详情。`;
 }
