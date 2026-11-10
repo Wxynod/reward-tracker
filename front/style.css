@@ -1461,3 +1461,33 @@ html[lang="en"] .brand h1, html[lang="en"] .login-card h1 { letter-spacing: .02e
 }
 
 .d-map { display: block; width: 100%; height: 212px; margin-top: 10px; border: 1px solid var(--line); border-radius: 10px; background: #ece6da; }
+
+/* Amex HK Tracker 加赏进度（积分页） */
+.hkt-src { margin-left: 10px; font-size: 12px; font-weight: 400; letter-spacing: 0; color: var(--muted); }
+.hkt-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.hkt-card { margin: 0; padding: 16px 18px; }
+.hkt-head { display: flex; align-items: center; gap: 12px; margin-bottom: 6px; }
+.hkt-title { flex: 1; min-width: 0; }
+.hkt-title h3 { margin: 0; font-size: 17px; }
+.hkt-title .meta { font-size: 12px; color: var(--muted); }
+.hkt-nums { display: flex; gap: 18px; text-align: right; }
+.hkt-nums small { display: block; font-size: 11px; color: var(--muted); letter-spacing: .06em; }
+.hkt-nums b { font-size: 20px; font-variant-numeric: tabular-nums; color: #016FD0; }
+.hkt-nums b i { font-style: normal; font-size: 11px; font-weight: 400; color: var(--muted); margin-left: 3px; }
+.hkt-row { padding: 9px 0 7px; border-top: 1px dashed var(--line); }
+.hkt-rhead { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 14px; }
+.hkt-rhead b { font-variant-numeric: tabular-nums; }
+.hkt-rhead small { font-weight: 400; color: var(--muted); font-size: 12px; margin-left: 4px; }
+.hkt-bar { height: 6px; border-radius: 3px; background: #ece6da; overflow: hidden; margin: 6px 0 4px; }
+.hkt-bar > i { display: block; height: 100%; border-radius: 3px; background: #016FD0; }
+.hkt-bar.full > i { background: var(--jade); }
+.hkt-rfoot { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.hkt-rfoot em { font-style: normal; color: #b88a1e; }
+.hkt-note { font-size: 11px; color: var(--muted); margin-top: 3px; }
+.hkt-note.warn { color: #b88a1e; padding-top: 8px; border-top: 1px dashed var(--line); margin-top: 4px; }
+@media (max-width: 700px) {
+  .hkt-grid { grid-template-columns: minmax(0, 1fr); }
+  .hkt-src { display: block; margin: 2px 0 0; }
+  .hkt-nums { gap: 12px; }
+  .hkt-nums b { font-size: 17px; }
+}

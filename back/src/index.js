@@ -252,6 +252,9 @@ const ROUTES = {
     return { item_id: id, accounts: out, pulse_cny_fx: true };
   },
 
+  // Amex HK Tracker 脚本推来的季度汇总（各类别加赏积分 / 折算签账额 / 上限），按季度保存，只留最近 8 个季度
+  "POST /api/manual/tracker": async (env, body) => saveTracker(env, body),
+
   "PUT /api/benefits": async (env, body) => {
     if (!Array.isArray(body.benefits)) throw httpError(400, "benefits must be an array");
     await putJSON(env, "benefits", body.benefits);
@@ -381,11 +384,12 @@ async function loadAll(env) {
     transactions = transactions.concat(Object.values(txns));
   }
   transactions.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
-  const [benefits, rewards] = await Promise.all([
+  const [benefits, rewards, amexHk] = await Promise.all([
     getJSON(env, "benefits", []),
     getJSON(env, "rewards", { cards: {}, rules: {}, balances: {}, closing: {}, cardface: {} }),
+    getJSON(env, "tracker:amex_hk", null),
   ]);
-  return { env: env.PLAID_ENV || "sandbox", items, transactions, benefits, rewards };
+  return { env: env.PLAID_ENV || "sandbox", items, transactions, benefits, rewards, trackers: { amex_hk: amexHk } };
 }
 
 const slimTxn = (t) => ({
@@ -454,7 +458,43 @@ const slimAccount = (a) => ({
 
 // ---------------------------------------------------------------- 手动导入（不走 Plaid）
 
-const INGEST_ROUTES = new Set(["POST /api/manual/import", "POST /api/manual/state"]);
+const INGEST_ROUTES = new Set(["POST /api/manual/import", "POST /api/manual/state", "POST /api/manual/tracker"]);
+
+const MONTH_RE = /^20\d{2}-(0[1-9]|1[0-2])$/;
+async function saveTracker(env, body) {
+  if (body?.source !== "amex_hk_tracker") throw httpError(400, "source 不认识");
+  const quarter = String(body.quarter || "");
+  if (!/^20\d{2}-Q[1-4]$/.test(quarter)) throw httpError(400, "quarter 不合法");
+  const months = Array.isArray(body.months) ? body.months.filter((m) => MONTH_RE.test(m)).slice(0, 3) : [];
+  if (months.length !== 3) throw httpError(400, "months 不合法");
+  const n0 = (v) => (typeof v === "number" && Number.isFinite(v) ? v : 0);
+  const cards = {};
+  for (const key of ["platinum", "explorer"]) {
+    const c = body.cards?.[key];
+    if (!c || typeof c !== "object") continue;
+    const categories = {};
+    for (const [ck, v] of Object.entries(c.categories || {}).slice(0, 8)) {
+      if (!/^[a-z]{1,20}$/.test(ck) || !v || typeof v !== "object") continue;
+      const monthly = {};
+      for (const m of months) { const x = v.monthly?.[m] || {}; monthly[m] = { points: n0(x.points), spend: n0(x.spend), count: n0(x.count) }; }
+      categories[ck] = {
+        label: str(v.label, 40) || ck, period: v.period === "month" ? "month" : "quarter", cap: num(v.cap),
+        points: n0(v.points), spend: n0(v.spend), count: n0(v.count), complete: !!v.complete,
+        note: str(v.note, 200) || "", unknown: n0(v.unknown), monthly,
+      };
+    }
+    const scanned = {};
+    for (const m of months) scanned[m] = num(c.scanned?.[m]);
+    cards[key] = { tail: /^\d{4,5}$/.test(String(c.tail || "")) ? String(c.tail) : null, categories, scanned };
+  }
+  if (!Object.keys(cards).length) throw httpError(400, "cards 为空");
+  const store = await getJSON(env, "tracker:amex_hk", { quarters: {} });
+  store.quarters[quarter] = { quarter, months, cards, pushed_at: new Date().toISOString() };
+  for (const k of Object.keys(store.quarters).sort().slice(0, -8)) delete store.quarters[k];
+  store.updated_at = store.quarters[quarter].pushed_at;
+  await putJSON(env, "tracker:amex_hk", store);
+  return { ok: true, quarter, quarters: Object.keys(store.quarters).length };
+}
 const isManual = (item) => item?.source === "manual";
 
 async function verifyIngest(request, env) {

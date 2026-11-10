@@ -222,6 +222,7 @@ async function ingest(data) {
   state.env = data.env;
   state.txns = data.transactions.map(normTxn);
   state.benefits = data.benefits || [];
+  state.trackers = data.trackers || {};
   state.rewards = { ...EMPTY_REWARDS(), ...(data.rewards || {}) };
   state.accounts = {};
   state.items = data.items.map(it => {
@@ -694,7 +695,55 @@ function earnCell(t) {
   </div>`;
 }
 
+// Amex HK Tracker 脚本推来的季度加赏汇总（记账本自己不重算，完全以脚本结果为准）
+function renderHkTracker() {
+  const el = $("#hk-tracker");
+  if (!el) return;
+  const qs = state.trackers?.amex_hk?.quarters || {};
+  const keys = Object.keys(qs).sort();
+  if (!keys.length) { el.innerHTML = ""; return; }
+  const t0 = today(), curM = t0.slice(0, 7), curQ = `${t0.slice(0, 4)}-Q${Math.ceil(+t0.slice(5, 7) / 3)}`;
+  const q = qs[curQ] || qs[keys[keys.length - 1]];
+  const isCur = q.quarter === curQ;
+  const pts = (n) => Math.round(n).toLocaleString("en-US");
+  const hk = (n) => `HK$${Math.round(n).toLocaleString("en-US")}`;
+  const when = new Date(q.pushed_at).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false });
+  const NAMES = { platinum: "Platinum", explorer: "Explorer" };
+  const cards = ["platinum", "explorer"].filter((k) => q.cards[k]).map((k) => {
+    const c = q.cards[k], cats = Object.values(c.categories);
+    const qPts = cats.reduce((s, x) => s + q.months.reduce((s2, m) => s2 + (x.monthly[m]?.points || 0), 0), 0);
+    const mPts = isCur ? cats.reduce((s, x) => s + (x.monthly[curM]?.points || 0), 0) : null;
+    const missing = q.months.filter((m) => m <= curM && !c.scanned[m]);
+    const acct = Object.values(state.accounts).find((a) => a.source === "manual" && c.tail && String(a.mask || "").endsWith(c.tail.slice(-4)));
+    const rows = cats.map((x) => {
+      const pct = x.cap ? Math.max(0, Math.min(100, (x.spend / x.cap) * 100)) : 0;
+      const full = x.cap && x.spend >= x.cap;
+      return `<div class="hkt-row">
+        <div class="hkt-rhead"><span>${esc(x.label)}${x.period === "month" ? `<small>按月</small>` : ""}</span><b>${hk(x.spend)}${x.cap ? `<small> / ${hk(x.cap)}</small>` : ""}</b></div>
+        ${x.cap ? `<div class="bar hkt-bar${full ? " full" : ""}"><i style="width:${pct.toFixed(1)}%"></i></div>` : ""}
+        <div class="hkt-rfoot"><span>${x.cap ? (full ? "已满" : `尚余 ${hk(x.cap - x.spend)}`) : "无上限资料"}</span><span>${pts(x.points)} 分 · ${x.count} 笔${x.unknown ? `<em> · 有未识别记录</em>` : ""}</span></div>
+        ${x.note ? `<div class="hkt-note">${esc(x.note)}</div>` : ""}
+      </div>`;
+    }).join("");
+    return `<div class="card hkt-card">
+      <div class="hkt-head">
+        ${acct ? `<span class="hkt-face">${RT_CARDS.face(acct, "sm")}</span>` : ""}
+        <div class="hkt-title"><h3>${NAMES[k]}</h3><span class="meta">American Express HK${c.tail ? ` ··${esc(c.tail)}` : ""}</span></div>
+        <div class="hkt-nums">
+          ${mPts != null ? `<div><small>本月加赏</small><b>${pts(mPts)}<i>分</i></b></div>` : ""}
+          <div><small>本季加赏</small><b>${pts(qPts)}<i>分</i></b></div>
+        </div>
+      </div>
+      ${rows}
+      ${missing.length ? `<div class="hkt-note warn">${missing.map((m) => `${+m.slice(5)} 月`).join("、")}还没扫描，数字可能不全</div>` : ""}
+    </div>`;
+  }).join("");
+  el.innerHTML = `<h3 class="section-title">Amex HK 加赏进度 · ${esc(q.quarter.replace("-", " "))}<span class="hkt-src">来自 Amex HK Tracker 脚本 · 更新于 ${esc(when)}${isCur ? "" : " · 不是本季度"}</span></h3>
+    <div class="hkt-grid">${cards}</div>`;
+}
+
 function renderRewards() {
+  renderHkTracker();
   const month = $("#r-month").value;
   const editing = state.editing;
   const balances = state.rewards.balances || {};
