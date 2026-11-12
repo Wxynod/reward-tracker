@@ -232,7 +232,7 @@ async function ingest(data) {
   state.rewards = { ...EMPTY_REWARDS(), ...(data.rewards || {}) };
   state.accounts = {};
   state.items = data.items.map(it => {
-    const accounts = it.accounts.map(a => normAccount(a, it));
+    const accounts = it.accounts.map(a => normAccount(window.RT_APPLE?.is(a) ? RT_APPLE.withTerms(a) : a, it));
     for (const a of accounts) state.accounts[a.id] = { ...a, institution: it.institution };
     return { ...it, accounts };
   });

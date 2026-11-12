@@ -104,7 +104,7 @@
           ${L.aprs?.length ? `<table class="ad-apr"><thead><tr><th>APR</th><th>年利率</th><th>计息余额</th><th>本期利息</th></tr></thead><tbody>
             ${L.aprs.map((x) => `<tr><td>${esc(APR[x.type] || x.type)}</td><td>${x.na ? "没有" : x.pct != null ? `${(+x.pct).toFixed(2)}%` : "—"}</td><td>${x.balance != null ? fmt(x.balance) : "—"}</td><td>${x.interest != null ? fmt(x.interest) : "—"}</td></tr>`).join("")}
           </tbody></table>` : L.na?.includes("aprs") ? `<p class="hint">APR：没有</p>` : ""}
-          ${L.computed ? `<p class="hint">按交易记录推算：每月最后一天出账，次月倒数第 5 天还款；最低还款 CSV 里没有。</p>` : ""}
+          ${L.computed ? `<p class="hint">按交易记录推算：每月最后一天出账，次月倒数第 5 天还款；最低还款 $25（欠款不足时为全额），APR 按卡片条款。</p>` : ""}
           ${L.as_of ? `<p class="hint">账单数据来自 Amex 网银 · ${esc(new Date(L.as_of).toLocaleString("zh-CN"))}</p>` : ""}
         </section>`;
       } else {

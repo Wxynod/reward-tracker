@@ -9,6 +9,8 @@
 
 (function () {
   const ITEM_ID = "manual:apple_card", ACCT_ID = "apple_card";
+  // CSV 里没有的卡片条款（用户提供）：信用额度、最低还款（欠款不足时为全额）、购物 APR
+  const TERMS = { limit: 4000, minPayment: 25, apr: 25.74 };
   const COLS = ["Transaction Date", "Clearing Date", "Description", "Merchant", "Category", "Type", "Amount (USD)"];
 
   // ---------------------------------------------------------------- CSV
@@ -189,10 +191,17 @@
     const pay = mine.filter((t) => t.category === "LOAN_PAYMENTS" && t.amount < 0).sort((p, q) => (p.date < q.date ? 1 : -1))[0];
     return {
       last_statement_balance: Math.round(bal * 100) / 100, last_statement_issue_date: stmt,
-      minimum_payment_amount: null, next_payment_due_date: dueOf(y, m),
+      minimum_payment_amount: bal > 0 ? Math.min(TERMS.minPayment, Math.round(bal * 100) / 100) : 0, next_payment_due_date: dueOf(y, m),
       last_payment_amount: pay ? -pay.amount : null, last_payment_date: pay ? pay.date : null,
-      is_overdue: null, aprs: [], eom: true, computed: true, source: "apple_csv",
+      is_overdue: null, aprs: [{ type: "purchase_apr", pct: TERMS.apr, balance: null, interest: null }], eom: true, computed: true, source: "apple_csv",
     };
+  }
+
+  // 已存的账户里没有额度（早于加额度时导入）：补上额度，可用额度 = 额度 − 当前欠款
+  function withTerms(a) {
+    if (typeof a.limit === "number") return a;
+    const bal = typeof a.balance_current === "number" ? a.balance_current : 0;
+    return { ...a, limit: TERMS.limit, balance_available: Math.round((TERMS.limit - bal) * 100) / 100 };
   }
 
   // ---------------------------------------------------------------- 状态
@@ -236,7 +245,7 @@
       const d = await api("/api/manual/import", { method: "POST", body: {
         item_id: ITEM_ID,
         item: { institution: "Apple Card", notice: "Apple Card 交易 CSV 上传，不经 Plaid" },
-        accounts: [{ id: ACCT_ID, name: "Apple Card", official_name: "Goldman Sachs Bank USA", type: "credit", subtype: "credit card", currency: "USD", balance_from_txns: true, opening_balance: 0 }],
+        accounts: [{ id: ACCT_ID, name: "Apple Card", official_name: "Goldman Sachs Bank USA", type: "credit", subtype: "credit card", currency: "USD", balance_from_txns: true, opening_balance: 0, limit: TERMS.limit }],
         transactions: pending.txns,
       } });
       if (d.rejected?.length) throw new Error(`${d.rejected.length} 笔被拒：${d.rejected[0].reason}`);
@@ -333,7 +342,8 @@
         <ul>
           <li><b>不会自动同步。</b>「同步」「立刻从银行刷新」对它没有作用；上传新的 CSV 才会更新。</li>
           <li><b>当前欠款</b>是已导入交易的累计，截至最后一笔交易那天；之后的消费要等下次上传。</li>
-          <li><b>账单日和还款日</b>按固定规则推算：每月最后一天出账，次月倒数第 5 天还款。最低还款 CSV 里没有。</li>
+          <li><b>账单日和还款日</b>按固定规则推算：每月最后一天出账，次月倒数第 5 天还款。</li>
+          <li><b>额度、最低还款、APR</b>CSV 里没有，按卡片条款填：额度 $4,000，最低还款 $25（欠款不足 $25 时为全额），购物 APR 25.74%。</li>
           <li><b>Daily Cash</b>按 Apple Pay 2% 估算，Apple 和 Uber 按 3%；个别不对的，在设置的「更新」里逐笔改。</li>
           <li><b>没有 MCC，</b>类别取自 Apple 的分类；地址取自交易描述，支付平台（Alipay、WeChat Pay）和 Uber 的不显示。</li>
         </ul>
@@ -370,7 +380,7 @@
 
   }
 
-  const api_ = { ITEM_ID, ACCT_ID, is, liability, status, panelHTML, onboardHTML, noteHTML, convert, TYPE_ZH };
+  const api_ = { ITEM_ID, ACCT_ID, TERMS, is, withTerms, liability, status, panelHTML, onboardHTML, noteHTML, convert, TYPE_ZH };
   if (typeof module !== "undefined" && module.exports) module.exports = api_;
   if (typeof window !== "undefined") window.RT_APPLE = api_;
 })();
