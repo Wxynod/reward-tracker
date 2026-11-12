@@ -575,8 +575,10 @@ function renderAccounts() {
     $("#acct-sum").innerHTML = RT_CAL.tiles ? RT_CAL.tiles() : RT_CAL.summary();
     const ico = $(".cal-ico b"); if (ico) ico.textContent = new Date().getDate();
   }
-  if (!state.items.length) { $("#account-list").innerHTML = `<div class="empty">还没有连接银行</div>`; return; }
-  $("#account-list").innerHTML = state.items.map((it) => `
+  const onboarding = window.RT_APPLE?.onboardHTML() || "";
+  if (!state.items.length) { $("#account-list").innerHTML = onboarding || `<div class="empty">还没有连接银行</div>`; return; }
+  const items = [...state.items].sort((a, b) => Number(isApple(b)) - Number(isApple(a)));
+  $("#account-list").innerHTML = onboarding + items.map((it) => `
     <div class="card${it.source === "manual" ? " manual" : ""}">
       <div class="inst-head">
         <h3 class="with-logo">${instLogo(it.institution)}<span class="inst-name">${esc(it.institution)}</span>${regionTag(it.region)}</h3>
@@ -606,7 +608,7 @@ function renderAccounts() {
         </div>`;
       }).join("")}
       <div class="hint" style="margin-top:8px">${it.source === "manual" ? "上次导入" : "上次同步"}：${it.last_synced ? new Date(it.last_synced).toLocaleString("zh-CN") : "尚未同步"}</div>
-    </div>`).join("") + (window.RT_APPLE?.onboardHTML() || "");
+    </div>`).join("");
 }
 
 // 按类别的支出分布：一条彩色比例条 + 可点击筛选的类别标签
@@ -829,8 +831,9 @@ function renderRewards() {
     </article>`;
   }).join("");
   updateScrollButtons();
-  renderPointsPeriods(keys);
-  renderPointsDrill(keys);
+  const groups = [...new Set(keys.map(earningsGroup))];
+  renderPointsPeriods(groups);
+  renderPointsDrill(groups);
 
   const rows = Object.values(cards).sort((x, y) => y.earned - x.earned || y.spend - x.spend);
   $("#card-earn").innerHTML = rows.length ? `<div class="card earn-table">${rows.map((c) => {
@@ -882,6 +885,10 @@ function periodStarts(t0) {
   ];
 }
 
+const cashBackGroup = { name: "Cash Back", unit: "cash", color: "#00AEEF" };
+const earningsGroup = (program) => R.PROGRAMS[program].unit === "cash" ? "cash_back" : program;
+const earningsGroupInfo = (key) => key === "cash_back" ? cashBackGroup : R.PROGRAMS[key];
+
 function renderPointsPeriods(keys) {
   const el = $("#points-periods");
   if (!keys.length) { el.innerHTML = ""; return; }
@@ -889,14 +896,16 @@ function renderPointsPeriods(keys) {
   const sums = Object.fromEntries(keys.map((k) => [k, starts.map(() => 0)]));
   for (const t of state.txns) {
     const e = state.earn.get(t.id);
-    if (!e || e.cat === "none" || !sums[e.program] || t.date > t0) continue;
-    starts.forEach(([, s], i) => { if (t.date >= s) sums[e.program][i] += e.earned; });
+    if (!e || e.cat === "none" || t.date > t0) continue;
+    const row = sums[earningsGroup(e.program)];
+    if (row) starts.forEach(([, s], i) => { if (t.date >= s) row[i] += e.earned; });
   }
   el.innerHTML = `<div class="card period-table"><table>
     <thead><tr><th></th>${starts.map(([l, s]) => `<th>${l}<small>${l === "今日" ? `${+s.slice(5, 7)}/${+s.slice(8)}` : `${+s.slice(5, 7)}/${+s.slice(8)} 起`}</small></th>`).join("")}</tr></thead>
     <tbody>${keys.map((k) => {
-      const p = R.PROGRAMS[k];
-      return `<tr><th>${programLogo(k, "plogo xs")}<span>${esc(p.name)}</span></th>${sums[k].map((v, i) =>
+      const p = earningsGroupInfo(k);
+      const logo = k === "cash_back" ? `<span class="plogo xs" style="--brand:${p.color}"><i>$</i></span>` : programLogo(k, "plogo xs");
+      return `<tr><th>${logo}<span>${esc(p.name)}</span></th>${sums[k].map((v, i) =>
         `<td class="${v ? "" : "zero"}" data-label="${starts[i][0]}">${v ? (v > 0 ? "+" : "") + esc(R.fmtEarned(v, p.unit)) : "—"}</td>`).join("")}</tr>`;
     }).join("")}</tbody>
   </table><p class="hint">按交易日期统计的估算积分（含 Pending），以银行账单为准</p></div>`;
@@ -907,12 +916,12 @@ function renderPointsDrill(keys) {
   if (!keys.length) { wrap.hidden = true; return; }
   wrap.hidden = false;
   if (!keys.includes(pointsUI.prog)) pointsUI.prog = keys[0];
-  $("#points-prog").innerHTML = keys.map((k) => `<button data-points-prog="${k}" class="${k === pointsUI.prog ? "on" : ""}">${esc(R.PROGRAMS[k].name)}</button>`).join("");
-  const k = pointsUI.prog, p = R.PROGRAMS[k];
+  $("#points-prog").innerHTML = keys.map((k) => `<button data-points-prog="${k}" class="${k === pointsUI.prog ? "on" : ""}">${esc(earningsGroupInfo(k).name)}</button>`).join("");
+  const k = pointsUI.prog, p = earningsGroupInfo(k);
   const entries = [];
   for (const t of state.txns) {
     const e = state.earn.get(t.id);
-    if (e && e.cat !== "none" && e.program === k) entries.push({ date: t.date, s: k, v: e.earned });
+    if (e && e.cat !== "none" && earningsGroup(e.program) === k) entries.push({ date: t.date, s: k, v: e.earned });
   }
   const fmtP = (v) => (p.unit === "cash" ? "" : "") + R.fmtEarned(v, p.unit) + (p.unit === "cash" ? "" : " 点");
   const shortP = (v) => (p.unit === "cash" ? `$${Math.round(v)}` : Math.abs(v) >= 1000 ? `${(v / 1000).toFixed(v >= 10000 ? 0 : 1)}k` : String(Math.round(v)));
