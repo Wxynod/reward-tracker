@@ -121,6 +121,8 @@
       row("状态", t.pending ? "待入账（Pending）" : "已入账（Posted）"),
       row("由待入账转来", d.pending_transaction_id ? `<code>${esc(d.pending_transaction_id)}</code>` : "", { mono: true }),
       row("交易类型", d.transaction_type ? `${esc(TYPE[d.transaction_type] || d.transaction_type)} <small>${esc(d.transaction_type)}</small>` : ""),
+      row("交易性质", d.apple_type ? `${esc(RT_APPLE.TYPE_ZH[d.apple_type] || d.apple_type)} <small>${esc(d.apple_type)}</small>` : ""),
+      row("入账日期", d.apple_type && d.post_date && d.post_date !== t.date ? esc(dateZh(d.post_date)) : ""),
       row("交易代码", d.transaction_code ? esc(d.transaction_code) : ""),
       row("支票号", d.check_number ? esc(d.check_number) : ""),
       row("币种", t.orig_currency ? `${esc(t.orig_currency)} <small>${esc(fxDescription(t))}</small>` : esc(t.currency || "USD") + (d.unofficial_currency_code ? ` <small>非官方 ${esc(d.unofficial_currency_code)}</small>` : "")),
@@ -128,12 +130,15 @@
     ].join(""));
 
     const secMerchant = section("商户", [
-      row("商户名", t.merchant ? esc(t.merchant) : /_statement$/.test(t.source || "") ? "<small>结单不提供</small>" : "<small>Plaid 未识别</small>"),
+      row("商户名", t.merchant ? esc(t.merchant) : d.apple_type ? "" : /_statement$/.test(t.source || "") ? "<small>结单不提供</small>" : "<small>Plaid 未识别</small>"),
       row("银行原始描述", esc(d.original_description || t.name)),
       row("外币原始金额", d.foreign ? `${esc(d.foreign.amount)} ${esc(d.foreign.currency)} <small>汇率 ${esc(d.foreign.rate)}</small>` : ""),
       row("优惠", d.offer ? esc(d.offer) : ""),
       row("所属结单", d.statement_date ? `${esc(dateZh(d.statement_date))} 出账` : ""),
       row("汇丰类别", d.hsbc_category ? esc(d.hsbc_category) : ""),
+      row("Apple 类别", d.apple_category ? esc(d.apple_category) : ""),
+      row("经由", d.via ? esc(d.via) : ""),
+      row("地址", d.platform_address ? "<small>描述里是支付平台的地址，不是商户的，没有显示</small>" : ""),
       row("Amex 参考号", d.reference ? `<code>${esc(d.reference)}</code>` : "", { mono: true }),
       row("网站", t.website ? `<a href="${esc(/^https?:/.test(t.website) ? t.website : "https://" + t.website)}" target="_blank" rel="noopener">${esc(t.website.replace(/^https?:\/\//, ""))} ↗</a>` : ""),
       row("地址", mapQ ? `${esc(mapQ)}${loc.store_number ? ` <small>门店 #${esc(loc.store_number)}</small>` : ""}<br><a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapQ)}" target="_blank" rel="noopener">在地图中查看 ↗</a>` : ""),

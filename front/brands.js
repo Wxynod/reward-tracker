@@ -33,6 +33,11 @@
     [/home ?depot/i, "homedepot.com"], [/lowe'?s/i, "lowes.com"], [/ikea/i, "ikea.com"],
     [/nike/i, "nike.com"], [/uniqlo/i, "uniqlo.com"], [/\bzara\b/i, "zara.com"], [/sephora/i, "sephora.com"],
     [/petco/i, "petco.com"], [/chewy/i, "chewy.com"], [/wellcome/i, "wellcome.com.hk"],
+    [/lululemon/i, "lululemon.com"], [/\bcoach\b/i, "coach.com"], [/farfetch/i, "farfetch.com"], [/moncler/i, "moncler.com"],
+    [/pinduoduo/i, "pinduoduo.com"], [/taobao/i, "taobao.com"], [/disneyland/i, "hongkongdisneyland.com"], [/marks ?& ?spencer/i, "marksandspencer.com"],
+    [/don don donki/i, "dondondonki.com"], [/mannings/i, "mannings.com.hk"], [/sa sa cosmetic/i, "sasa.com"], [/city ?super/i, "citysuper.com.hk"],
+    [/kee wah/i, "keewah.com"], [/on sportswear/i, "on.com"], [/yohji yamamoto/i, "yohjiyamamoto.co.jp"], [/best mart/i, "bestmart360.com"],
+    [/big bus/i, "bigbustours.com"], [/\btfl\b/i, "tfl.gov.uk"], [/heytea/i, "heytea.com"], [/coca-co/i, "coca-cola.com"], [/suica/i, "jreast.co.jp"],
     [/park ?n ?shop/i, "parknshop.com"], [/hktv ?mall/i, "hktvmall.com"], [/7-?eleven/i, "7-eleven.com"],
     // 订阅 / 通讯 / 软件
     [/netflix/i, "netflix.com"], [/spotify/i, "spotify.com"], [/hulu/i, "hulu.com"], [/disney\s*\+|disney plus/i, "disneyplus.com"],

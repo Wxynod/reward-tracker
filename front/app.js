@@ -29,7 +29,13 @@ const isManual = (a) => a?.source === "manual";
 // 手动导入的香港卡按机构区分说明文案：汇丰（月结单 PDF 导入）/ Amex（月结单 CSV + 网银脚本）
 const isHSBC = (x) => /hsbc/i.test(x?.institution || "");
 const fxNote = (cur) => `1 USD = ${FX_PER_USD[cur]} ${cur}`;
+const isApple = (x) => x?.item_id === "manual:apple_card" || x?.id === "apple_card";
+const NOTE_ICO = `<svg class="flag note-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg>`;
 function manualNote(it) {
+  if (isApple(it)) {
+    const st = RT_APPLE.status();
+    return `<b>没有通过 Plaid 连接。</b>交易来自你上传的 Apple Card CSV${st.count ? `，已更新到 ${+st.last.slice(5, 7)} 月 ${+st.last.slice(8, 10)} 日` : ""}；Daily Cash 按 Apple Pay 2%、Apple 和 Uber 3% 估算。点开卡片上传新的 CSV、看详情。`;
+  }
   if (isHSBC(it)) {
     const rates = new Set(it.accounts.filter(a => a.orig_currency).map(a => a.fx ? "ECB USD/CNY" : fxNote(a.orig_currency)));
     return `<b>没有通过 Plaid 连接。</b>余额、额度和账单信息取自汇丰网银，交易来自网银和月结单（PDF），都在你打开汇丰网银时由脚本推送；金额以原币显示，美元小字按 ${[...rates].join("、")} 换算；结单没有 MCC，本站不估算汇丰积分。点开卡片看详情。`;
@@ -118,8 +124,8 @@ const closingIn = (y, m, day) => {
 function closingDay(acctId) {
   const manual = Number(state.rewards.closing?.[acctId]);
   if (manual) return { day: manual, source: "manual" };
-  const iss = state.accounts[acctId]?.liability?.last_statement_issue_date;
-  if (iss) return { day: Number(iss.slice(8, 10)), source: "auto", from: iss };
+  const L = state.accounts[acctId]?.liability, iss = L?.last_statement_issue_date;
+  if (iss) return { day: L.eom ? 31 : Number(iss.slice(8, 10)), source: "auto", from: iss };   // eom：固定月底出账（Apple Card）
   return { day: 31, source: "default" };
 }
 // 还款状态：距离还款日几天、本期是否已还
@@ -230,6 +236,8 @@ async function ingest(data) {
     for (const a of accounts) state.accounts[a.id] = { ...a, institution: it.institution };
     return { ...it, accounts };
   });
+  // Apple Card（CSV 上传）：账单日 / 还款日 / 上期账单按规则现算
+  if (window.RT_APPLE) for (const a of Object.values(state.accounts)) if (RT_APPLE.is(a)) a.liability = RT_APPLE.liability(a, state.txns, today());
   $("#fx-warning").hidden = !pulseRates.estimated;
   render();
 }
@@ -573,13 +581,14 @@ function renderAccounts() {
       <div class="inst-head">
         <h3 class="with-logo">${instLogo(it.institution)}<span class="inst-name">${esc(it.institution)}</span>${regionTag(it.region)}</h3>
         <div class="inst-actions">
-          ${it.source === "manual" ? `<span class="src-tag" title="没有通过 Plaid 连接，交易由脚本导入">非 Plaid</span>` : `
+          ${isApple(it) ? `<button class="btn small" data-apple-open>上传 CSV</button>` : ""}
+          ${it.source === "manual" ? `<span class="src-tag" title="没有通过 Plaid 连接，交易由脚本或 CSV 导入">非 Plaid</span>` : `
           ${it.error ? `<button class="btn small primary" data-relink="${esc(it.item_id)}">重新连接</button>` : ""}
           ${!it.error && it.liab_status === "consent_required" ? `<button class="btn small" data-liab="${esc(it.item_id)}" title="授权后可自动获取账单日、还款日、最低还款和 APR">授权账单信息</button>` : ""}
           <button class="btn small ghost" data-remove="${esc(it.item_id)}" data-name="${esc(it.institution)}">断开</button>`}
         </div>
       </div>
-      ${it.source === "manual" ? `<div class="manual-note">${HK_FLAG}<span>${manualNote(it)}</span></div>` : ""}
+      ${it.source === "manual" ? `<div class="manual-note">${it.region === "HK" ? HK_FLAG : NOTE_ICO}<span>${manualNote(it)}</span></div>` : ""}
       ${it.error ? `<div class="err">${esc(it.error.code)}：${esc(it.error.message)}</div>` : ""}
       ${it.accounts.map((a) => {
         const name = cardName(a);
@@ -597,7 +606,7 @@ function renderAccounts() {
         </div>`;
       }).join("")}
       <div class="hint" style="margin-top:8px">${it.source === "manual" ? "上次导入" : "上次同步"}：${it.last_synced ? new Date(it.last_synced).toLocaleString("zh-CN") : "尚未同步"}</div>
-    </div>`).join("");
+    </div>`).join("") + (window.RT_APPLE?.onboardHTML() || "");
 }
 
 // 按类别的支出分布：一条彩色比例条 + 可点击筛选的类别标签

@@ -52,7 +52,7 @@
           <li><b>结单没有 MCC，</b>类别按商户名归入汇丰的日常交易分类；本站不估算汇丰积分（RewardCash / 里数）。</li>
           <li><b>账单信息</b>（上期结欠、还款日、最低还款）取自汇丰网银；APR 网银不提供，取自最近一期结单。</li>
         </ul>
-      </section>` : isManual(a) ? `<section class="ad-sec ad-manual">
+      </section>` : isApple(a) ? RT_APPLE.panelHTML() + RT_APPLE.noteHTML() : isManual(a) ? `<section class="ad-sec ad-manual">
         <h4>${regionTag(a.region)}没有通过 Plaid 连接</h4>
         <p>这张卡在香港发行，Plaid 连不上：历史交易来自 Amex 月结单（CSV），新交易在你打开 Amex 网银时由 Tampermonkey 脚本推送。这样会有以下影响：</p>
         <ul>
@@ -104,6 +104,7 @@
           ${L.aprs?.length ? `<table class="ad-apr"><thead><tr><th>APR</th><th>年利率</th><th>计息余额</th><th>本期利息</th></tr></thead><tbody>
             ${L.aprs.map((x) => `<tr><td>${esc(APR[x.type] || x.type)}</td><td>${x.na ? "没有" : x.pct != null ? `${(+x.pct).toFixed(2)}%` : "—"}</td><td>${x.balance != null ? fmt(x.balance) : "—"}</td><td>${x.interest != null ? fmt(x.interest) : "—"}</td></tr>`).join("")}
           </tbody></table>` : L.na?.includes("aprs") ? `<p class="hint">APR：没有</p>` : ""}
+          ${L.computed ? `<p class="hint">按交易记录推算：每月最后一天出账，次月倒数第 5 天还款；最低还款 CSV 里没有。</p>` : ""}
           ${L.as_of ? `<p class="hint">账单数据来自 Amex 网银 · ${esc(new Date(L.as_of).toLocaleString("zh-CN"))}</p>` : ""}
         </section>`;
       } else {
@@ -170,7 +171,7 @@
         <div class="d-row"><dt>银行</dt><dd>${esc(a.institution)}</dd></div>
         <div class="d-row"><dt>类型</dt><dd>${esc(a.type)} / ${esc(a.subtype || "—")}</dd></div>
         <div class="d-row"><dt>币种</dt><dd>${a.orig_currency ? `${esc(a.orig_currency)} <small>${esc(fxDescription(a))}</small>` : esc(a.currency || "USD")}</dd></div>
-        <div class="d-row"><dt>数据来源</dt><dd>${isManual(a) ? "月结单导入（不经 Plaid）" : "Plaid"}</dd></div>
+        <div class="d-row"><dt>数据来源</dt><dd>${isApple(a) ? "CSV 上传（不经 Plaid）" : isManual(a) ? "月结单导入（不经 Plaid）" : "Plaid"}</dd></div>
         <div class="d-row"><dt>${isManual(a) ? "上次导入" : "上次同步"}</dt><dd>${it?.last_synced ? new Date(it.last_synced).toLocaleString("zh-CN") : "—"}</dd></div>
         <div class="d-row mono"><dt>account_id</dt><dd><code>${esc(a.id)}</code></dd></div>
       </dl></details>`;

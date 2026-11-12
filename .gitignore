@@ -19,3 +19,6 @@ hsbc_hk_statements/
 CHATGPT.md
 /CLAUDE.md
 /front/maps-key.js
+
+# 各卡结单 / 交易导出原件：含消费明细，只留在本机
+card_statements/
