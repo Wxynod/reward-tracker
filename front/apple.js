@@ -344,7 +344,7 @@
           <li><b>当前欠款</b>是已导入交易的累计，截至最后一笔交易那天；之后的消费要等下次上传。</li>
           <li><b>账单日和还款日</b>按固定规则推算：每月最后一天出账，次月倒数第 5 天还款。</li>
           <li><b>额度、最低还款、APR</b>CSV 里没有，按卡片条款填：额度 $4,000，最低还款 $25（欠款不足 $25 时为全额），购物 APR 25.74%。</li>
-          <li><b>Daily Cash</b>按 Apple Pay 2% 估算，Apple 和 Uber 按 3%；个别不对的，在设置的「更新」里逐笔改。</li>
+          <li><b>Daily Cash</b>默认按 Apple Pay 2% 估算，Apple 直营及可识别的合作商户按 3%。CSV 无法确认支付方式或预订渠道；Booking.com、Hertz 和实体卡消费可按 Wallet 实际回赠在「更新」里调整。</li>
           <li><b>没有 MCC，</b>类别取自 Apple 的分类；地址取自交易描述，支付平台（Alipay、WeChat Pay）和 Uber 的不显示。</li>
         </ul>
       </section>`;

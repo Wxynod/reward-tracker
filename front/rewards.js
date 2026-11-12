@@ -196,7 +196,6 @@
     // ---------- Apple Card · Daily Cash
     apple_card: { name: "Apple Card", issuer: "Apple", program: "apple_cash", match: /apple/i, base: 2,
       note: "默认按 Apple Pay 2% 估算；实体卡消费 1%，可手动改",
-      merchants: /\bapple\b|apple\.com|itunes|\buber\b|walgreens|duane\s*reade|\bnike\b|exxon|\bmobil\b|ace\s*hardware|chargepoint|\bhertz\b|booking\.com/i,
       rules: [{ cats: ["merchant3"], rate: 3 }] },
   };
 
@@ -233,7 +232,35 @@
     return null;
   }
 
+  // Apple Support 120400. Prefer the original CSV fields to the shortened display name.
+  function appleBonusMerchant(t) {
+    const d = t.detail || {};
+    const merchant = (d.apple_merchant || t.merchant || t.name || "").trim();
+    const fields = [merchant, (d.original_description || "").trim()];
+    const matches = (re) => fields.some(s => re.test(s));
+    if (d.via || matches(/^(?:alipay(?:hk)?|weixin|ums|kpay|qfpay|bbmsl|paypal|sq|tst)\s*\*/i)) return false;
+    if (/^apple(?:\s*\(return\))?$/i.test(merchant) ||
+        matches(/^(?:apple\s+(?:store|services|retail|online store|shanghai stores|park visitor center)\b|(?:apple|itunes)\.com\/bill\b|apple\.com\/us\b)/i)) return true;
+
+    if (matches(/^(?:uber(?:\s*eats)?(?:$|[.*\s])|ubr\s*\*)/i)) {
+      if (matches(/\b(?:freight|family|teen|vouchers?|transit|gift\s*card|split\s*fare|group\s*order|alcohol)\b/i)) return false;
+      return matches(/^(?:uber(?:\s*eats)?(?:$|\.com\b|\s*\*|\s+(?:trip|ride|one)\b)|ubr\s*\*)/i);
+    }
+    if (matches(/^charge\s*point\b/i)) {
+      return !matches(/\b(?:fleet|private|commercial|assure(?:pro)?|support|software)\b/i);
+    }
+
+    // U.S.-only offers. USD and the account region cannot locate a purchase.
+    const country = d.location?.country;
+    const us = country ? /^(?:US|USA|United States(?: of America)?)$/i.test(country)
+      : /\b(?:USA|United States)\s*(?:\(return\))?$/i.test(fields[1]);
+    if (!us || matches(/\b(?:gift\s*cards?|drive[- ]?(?:thru|through)|pop[- ]?up|kiosk)\b/i)) return false;
+    // Booking.com and Hertz need booking details that are absent from the CSV.
+    return matches(/^(?:ace\s*hardware|walgreens|duane\s*reade|nike(?:town)?|snkrs|swoosh\.com|exxon(?:\s*mobil)?|mobil)(?=\b|\d)/i);
+  }
+
   function classify(t, product) {
+    if (product === PRODUCTS.apple_card && appleBonusMerchant(t)) return "merchant3";
     const text = `${t.merchant || ""} ${t.name || ""}`;
     if (product?.portal && product.portal.test(text)) return "portal";
     if (product?.merchants && product.merchants.test(text)) return product.merchantCat || "merchant3";
@@ -307,6 +334,10 @@
 
         const cat = classify(t, product);
         let rate = product.base, source = "基础倍数";
+        if (pKey === "apple_card" && [t.detail?.apple_merchant, t.detail?.original_description, t.merchant]
+          .some(s => /^(?:booking\.com|hertz)\b/i.test(s || ""))) {
+          source = "预订条件需核对 Wallet，暂按 Apple Pay 2% 估算";
+        }
 
         if (acctRules[key] != null) {
           rate = Number(acctRules[key]); source = `已记住 · ${ruleKeyLabel(key)}`;

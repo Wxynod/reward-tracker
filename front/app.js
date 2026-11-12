@@ -34,7 +34,7 @@ const NOTE_ICO = `<svg class="flag note-ico" viewBox="0 0 24 24" fill="none" str
 function manualNote(it) {
   if (isApple(it)) {
     const st = RT_APPLE.status();
-    return `<b>没有通过 Plaid 连接。</b>交易来自你上传的 Apple Card CSV${st.count ? `，已更新到 ${+st.last.slice(5, 7)} 月 ${+st.last.slice(8, 10)} 日` : ""}；Daily Cash 按 Apple Pay 2%、Apple 和 Uber 3% 估算。点开卡片上传新的 CSV、看详情。`;
+    return `<b>没有通过 Plaid 连接。</b>交易来自你上传的 Apple Card CSV${st.count ? `，已更新到 ${+st.last.slice(5, 7)} 月 ${+st.last.slice(8, 10)} 日` : ""}；Daily Cash 按 Apple Pay 2%、Apple 直营及可识别的合作商户 3% 估算。点开卡片上传新的 CSV、看详情。`;
   }
   if (isHSBC(it)) {
     const rates = new Set(it.accounts.filter(a => a.orig_currency).map(a => a.fx ? "ECB USD/CNY" : fxNote(a.orig_currency)));
