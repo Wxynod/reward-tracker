@@ -1704,17 +1704,20 @@ html[data-font="sans"] {
   --font-body: "Noto Sans SC", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", system-ui, sans-serif;
 }
 /* 黑体笔画更满，衬线版本里为宋体设计的大字距收一点，标题更紧凑 */
-html[data-font="sans"] .brand h1 { letter-spacing: .06em; }
-html[data-font="sans"] .login-card h1 { letter-spacing: .08em; }
-html[data-font="sans"] .rewards-head h2, html[data-font="sans"] .section-title { letter-spacing: .04em; }
+html[data-font="system"] {
+  --font-body: system-ui, -apple-system, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+}
+html:is([data-font="sans"], [data-font="system"]) .brand h1 { letter-spacing: .06em; }
+html:is([data-font="sans"], [data-font="system"]) .login-card h1 { letter-spacing: .08em; }
+html:is([data-font="sans"], [data-font="system"]) :is(.rewards-head h2, .section-title) { letter-spacing: .04em; }
 
 .font-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 10px; }
 .font-row > span { font-size: 13.5px; font-weight: 500; }
-.font-seg button { display: inline-flex; align-items: center; gap: 7px; padding: 3px 12px 3px 8px; font-size: 13px; }
-.fs-glyph { font-size: 17px; line-height: 1; font-weight: 500; }
-.fs-glyph.serif { font-family: "Noto Serif SC", "Songti SC", serif; }
-.fs-glyph.sans { font-family: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif; }
-.font-seg button:not(.on) .fs-glyph { opacity: .7; }
+.font-seg button { padding: 3px 11px; font-size: 13px; }
+/* 每个按钮用它自己的字体写名字，切换前就能看出区别 */
+.font-seg .fs-serif { font-family: "Noto Serif SC", "Songti SC", serif; }
+.font-seg .fs-sans { font-family: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif; }
+.font-seg .fs-system { font-family: system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; }
 
 /* 切换动画：约 2 秒的幕布。跟随当前白天 / 夜间的纸色和墨色；幕布后面换字体、下载字形，载好了再揭开 */
 .font-veil {
@@ -1729,20 +1732,16 @@ html[data-theme="dark"] .font-veil { background: color-mix(in srgb, var(--paper)
 .font-veil.out { opacity: 0; transition: opacity .45s cubic-bezier(.4, 0, .2, 1), backdrop-filter .45s ease, -webkit-backdrop-filter .45s ease; }
 .fv-box { display: flex; flex-direction: column; align-items: center; gap: 18px; transform: translateY(6px); transition: transform .6s cubic-bezier(.22, 1, .36, 1); }
 .font-veil.in .fv-box { transform: none; }
-.fv-glyphs { position: relative; width: 132px; height: 132px; display: grid; place-items: center; color: var(--ink); }
-.fv-glyphs::before { /* 印章式的细框，朱砂色 */
-  content: ""; position: absolute; inset: 0; border-radius: 22px; border: 1.5px solid color-mix(in srgb, var(--seal) 55%, transparent);
-  transform: scale(.94); opacity: 0; transition: transform .7s cubic-bezier(.22, 1, .36, 1) .1s, opacity .5s ease .1s;
-}
-.font-veil.in .fv-glyphs::before { transform: none; opacity: 1; }
-.fv-glyphs span { position: absolute; font-size: 88px; line-height: 1; font-weight: 500; transition: opacity .55s ease, filter .55s ease, transform .7s cubic-bezier(.22, 1, .36, 1); }
-.fv-new { opacity: 0; filter: blur(6px); transform: scale(1.06); }
-.font-veil.swap .fv-old { opacity: 0; filter: blur(6px); transform: scale(.94); }
+.fv-words { display: grid; place-items: center; color: var(--ink); }
+.fv-words span { grid-area: 1 / 1; font-size: 56px; line-height: 1.15; font-weight: 500; letter-spacing: .01em; white-space: nowrap;
+  transition: opacity .55s ease, filter .55s ease, transform .7s cubic-bezier(.22, 1, .36, 1); }
+.fv-new { opacity: 0; filter: blur(6px); transform: translateY(8px); }
+.font-veil.swap .fv-old { opacity: 0; filter: blur(6px); transform: translateY(-8px); }
 .font-veil.swap .fv-new { opacity: 1; filter: none; transform: none; }
-.fv-names { display: flex; align-items: center; gap: 10px; font-family: ui-sans-serif, system-ui, sans-serif; font-size: 12px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
-.fv-names b { font-weight: 600; color: var(--ink); }
-.fv-names i { font-style: normal; color: var(--seal); }
-.fv-bar { width: 132px; height: 2px; border-radius: 1px; background: var(--line); overflow: hidden; }
+.fv-cap { margin-top: -8px; font-family: ui-sans-serif, system-ui, sans-serif; font-size: 12px; letter-spacing: .12em; color: var(--muted);
+  opacity: 0; transition: opacity .5s ease .45s; }
+.font-veil.swap .fv-cap { opacity: 1; }
+.fv-bar { width: 96px; height: 2px; border-radius: 1px; background: var(--line); overflow: hidden; }
 .fv-bar i { display: block; height: 100%; width: 100%; background: var(--seal); transform-origin: left; transform: scaleX(0); animation: fvBar 1.5s cubic-bezier(.4, 0, .2, 1) .2s forwards; }
 .font-veil.slow .fv-bar i { animation: fvWait 1.1s ease-in-out infinite; }
 .font-veil.done .fv-bar i { animation: none; transform: scaleX(1); transition: transform .25s ease; }

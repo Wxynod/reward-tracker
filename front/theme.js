@@ -1,4 +1,4 @@
-// Reward Tracker — 白天 / 夜间模式，以及 Serif / Sans 字体。
+// Reward Tracker — 白天 / 夜间模式，以及 Serif / Sans / System 字体。
 // 放在 <head> 里同步执行：首帧绘制前就把 data-theme 设好，夜间打开不会先闪一下白底。
 // 设置（localStorage rt_theme）：{ mode: "light" | "dark", auto: bool, loc?: { lat, lng } }
 //   auto 打开时按日出日落决定：日出到日落之间白天，其余夜间。位置默认按系统时区估算（不弹定位权限），
@@ -91,26 +91,31 @@
   }
   paint(want()); // 首帧前
 
-  // ---------------------------------------------------------------- 字体：serif（Noto Serif SC）/ sans（Noto Sans SC），存 rt_font
+  // ---------------------------------------------------------------- 字体：serif（Noto Serif SC）/ sans（Noto Sans SC）/ system（设备自带），存 rt_font
   const FKEY = "rt_font";
-  const FAMILY = { serif: "Noto Serif SC", sans: "Noto Sans SC" };
+  const FONTS = {
+    serif:  { label: "Serif",  web: "Noto Serif SC", stack: '"Noto Serif SC", "Songti SC", serif' },
+    sans:   { label: "Sans",   web: "Noto Sans SC",  stack: '"Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif' },
+    system: { label: "System", web: null, stack: 'system-ui, -apple-system, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif' },
+  };
+  const caption = (f) => FONTS[f].web || (document.documentElement.lang === "en" ? "Your device’s font" : "本机系统字体");
   let font = "serif";
-  try { font = localStorage.getItem(FKEY) === "sans" ? "sans" : "serif"; } catch { /* 隐私模式 */ }
+  try { const v = localStorage.getItem(FKEY); if (FONTS[v]) font = v; } catch { /* 隐私模式 */ }
   root.dataset.font = font;
 
-  // 预先下载新字体里当前屏幕上用得到的字形（Google Fonts 把中文按 unicode-range 切片，只下需要的切片）
+  // 网络字体：预先下载当前屏幕上用得到的字形（Google Fonts 把中文按 unicode-range 切片，只下需要的切片）；系统字体不用下载
   function preload(f) {
-    const fam = FAMILY[f];
-    const text = [...new Set(((document.body?.innerText || "") + "永记账本积分交易权益任务账户分析设置").replace(/\s/g, ""))].slice(0, 2500).join("");
-    const loads = [400, 500, 600, 700].map((w) => document.fonts?.load(`${w} 16px "${fam}"`, text).catch(() => []));
-    return Promise.all(loads);
+    const fam = FONTS[f].web;
+    if (!fam || !document.fonts) return Promise.resolve();
+    const text = [...new Set(((document.body?.innerText || "") + "记账本积分交易权益任务账户分析设置").replace(/\s/g, ""))].slice(0, 2500).join("");
+    return Promise.all([400, 500, 600, 700].map((w) => document.fonts.load(`${w} 16px "${fam}"`, text).catch(() => [])));
   }
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   const timeout = (p, ms) => Promise.race([p, wait(ms)]);
 
   let fontBusy = false;
   async function setFont(f) {
-    if (f === font || fontBusy || !FAMILY[f]) return;
+    if (f === font || fontBusy || !FONTS[f]) return;
     fontBusy = true;
     const from = font;
     font = f;
@@ -122,22 +127,22 @@
         root.dataset.font = f;
         return;
       }
-      // 幕布：纸色半透明 + 背景模糊，跟随当前白天 / 夜间；中间一个「永」字从旧字体换到新字体
+      // 幕布：纸色半透明 + 背景模糊，跟随当前白天 / 夜间；中间的字体名从旧字体换成新字体
       const v = document.createElement("div");
       v.className = "font-veil";
       v.setAttribute("aria-hidden", "true");
       v.setAttribute("data-i18n-skip", "");
       v.innerHTML = `<div class="fv-box">
-        <div class="fv-glyphs"><span class="fv-old" style="font-family:'${FAMILY[from]}'">永</span><span class="fv-new" style="font-family:'${FAMILY[f]}'">永</span></div>
-        <div class="fv-names"><span>${FAMILY[from]}</span><i>→</i><b>${FAMILY[f]}</b></div>
+        <div class="fv-words"><span class="fv-old" style='font-family:${FONTS[from].stack}'>${FONTS[from].label}</span><span class="fv-new" style='font-family:${FONTS[f].stack}'>${FONTS[f].label}</span></div>
+        <div class="fv-cap">${caption(f)}</div>
         <div class="fv-bar"><i></i></div></div>`;
       document.body.appendChild(v);
       const t0 = performance.now();
       const all = preload(f);
-      const glyph = timeout(document.fonts.load(`500 88px "${FAMILY[f]}"`, "永"), 1500);
+      const word = FONTS[f].web ? timeout(document.fonts.load(`500 56px "${FONTS[f].web}"`, FONTS[f].label), 1500) : null;
       requestAnimationFrame(() => requestAnimationFrame(() => v.classList.add("in")));
-      // 0.55s 后（字形到了才换）旧字淡出、新字浮现
-      await Promise.all([wait(550), glyph]);
+      // 0.55s 后（新字体的字形到了才换）旧名字淡出、新名字浮现
+      await Promise.all([wait(550), word]);
       v.classList.add("swap");
       // 幕布完全盖住后在后面换字体，让浏览器在这段时间里排版、绘制
       await wait(Math.max(0, 900 - (performance.now() - t0)));
@@ -218,7 +223,7 @@
   document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") tick(); });
   // 其它标签页改了设置
   window.addEventListener("storage", (e) => {
-    if (e.key === FKEY) { font = e.newValue === "sans" ? "sans" : "serif"; root.dataset.font = font; syncFontUI(); return; }
+    if (e.key === FKEY) { font = FONTS[e.newValue] ? e.newValue : "serif"; root.dataset.font = font; syncFontUI(); return; }
     if (e.key !== KEY) return;
     pref = load(); if (pref.mode !== "dark") pref.mode = "light"; pref.auto = !!pref.auto;
     apply(want(), { animate: false }); schedule();
