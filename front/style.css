@@ -296,6 +296,9 @@ dialog h2 { margin: 0; font-size: 20px; }
   position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain;
   background: var(--logo-bg); padding: 6%;
 }
+/* 满版图标（Chase / Amex / Citi）：铺满圆角方块，不要白底和内边距 */
+.plogo.full img, .ilogo.full img { padding: 0; object-fit: cover; background: var(--brand); }
+.plogo.full, .ilogo.full, html[data-theme="dark"] .plogo.full, html[data-theme="dark"] .ilogo.full { box-shadow: none; }
 .ilogo-hsbc { width: 32px; height: 32px; }
 .ilogo-hsbc img { padding: 0; object-fit: cover; }
 .with-logo { display: flex; align-items: center; }

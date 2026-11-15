@@ -656,8 +656,13 @@ function logoSources(issuer, domain) {
   return list;
 }
 
+// Brandfetch 给这几家的图标本身就是满版的品牌色方块：不留白边、不垫白底，铺满徽章。
+// 换成备用来源（Plaid / favicon）时 logoFail 会去掉 full，恢复留白。
+const FULL_BLEED = new Set(["Chase", "American Express", "Citi"]);
+
 function logoHTML(issuer, domain, color, letter, cls) {
   const [src, ...rest] = logoSources(issuer, domain);
+  if (src && FULL_BLEED.has(issuer) && src.startsWith("https://cdn.brandfetch.io/")) cls += " full";
   const img = src
     ? `<img src="${esc(src)}" alt="${esc(issuer)}" ${rest.length ? `data-fallback="${esc(rest.join(" "))}"` : ""} referrerpolicy="strict-origin-when-cross-origin" onerror="logoFail(this)">`
     : "";
@@ -666,6 +671,7 @@ function logoHTML(issuer, domain, color, letter, cls) {
 
 window.logoFail = (img) => {
   const [next, ...rest] = (img.dataset.fallback || "").split(" ").filter(Boolean);
+  img.parentElement?.classList.remove("full");
   if (!next) return img.remove();
   if (rest.length) img.dataset.fallback = rest.join(" "); else delete img.dataset.fallback;
   img.src = next;
