@@ -99,7 +99,7 @@
     // 权益任务
     "已完成": "Done", "已过期": "Expired", "删除": "Delete", "自动": "Auto",
     "还没有自定义权益任务。例如开卡奖励的消费门槛、每月 Uber / 餐饮 credit。": "No custom tasks yet — e.g. a sign-up bonus spend target or a monthly Uber / dining credit.",
-    "＋ 新增权益任务": "＋ Add a benefit task", "＋": "＋",
+    "＋ 新增权益任务": "+ Add a benefit task", "未设置卡型": "No card product set", "＋": "＋",
     "名称": "Name", "卡片": "Card", "开始": "Start", "截止": "End", "目标": "Target", "商户关键词": "Merchant keywords", "备注": "Notes",
     "消费金额": "Spend amount", "消费笔数": "Purchase count", "可选": "Optional",
     "例：Amex Gold Uber Cash / 开卡消费 $4,000": "e.g. Amex Gold Uber Cash / $4,000 sign-up spend",
@@ -307,6 +307,7 @@
     R("(\\d{4}) 年 (\\d+) 月 (\\d+) 日", (_, y, mo, d) => `${m(mo)} ${d}, ${y}`),
     R("(\\d+)月(\\d+)日 · 周(.)", (_, mo, d, w) => `${WK[w]}, ${m(mo)} ${d}`),
     R("(\\d+)月(\\d+)日，(\\d+) 个事项", (_, mo, d, n) => `${m(mo)} ${d}, ${plural(n, "event")}`),
+    R("(\\d+)月(\\d+)日 周(.)", (_, mo, d, w) => `${WK[w]}, ${m(mo)} ${d}`),
     R("(\\d+)月(\\d+)日", (_, mo, d) => `${m(mo)} ${d}`),
     R("(\\d+) 月 (\\d+) 日", (_, mo, d) => `${m(mo)} ${d}`),
     R("(\\d{4}) 年 (\\d+) 月（双击进入）", (_, y, mo) => `${m(mo)} ${y} (double-click to open)`),
@@ -398,6 +399,9 @@
     R("平均 (\\S+)", (_, a) => `avg ${a}`),
     R("基础 (\\S+)", (_, a) => `Base ${a}`),
     R("合计 " + AMT, (_, a) => `Total ${a}`),
+    R("合计 ([\\d,.]+) 点", (_, n) => `Total ${n} pts`),
+    R("日均 " + AMT, (_, a) => `Daily avg ${a}`),
+    R("共 (\\d+) 天", (_, n) => plural(n, "day")),
     R("最大一笔 " + AMT, (_, a) => `Largest ${a}`),
     R("对比上月同期 " + AMT, (_, a) => `vs. same point last month ${a}`),
     R("对比上月同期", () => "vs. same point last month"),
@@ -459,6 +463,9 @@
     if (r == null && /[，；]/.test(core)) r = core.split(/(，|；)/).map((p) => (p === "，" ? ", " : p === "；" ? "; " : CJK.test(p) ? one(p) ?? trFrag(p) : p)).join("");
     if (r == null) r = trFrag(core);
     if (CJK.test(r)) missing.add(core);
+    // 中文句末的。：！？；后面不需要空格，英文需要：原文以这些结尾、译文以英文标点结尾时补一个空格，
+    // 避免「<b>没有通过 Plaid 连接。</b>交易来自…」译成 “Plaid.Transactions”
+    if (!trail && /[。：！？；]$/.test(core) && /[.:!?;]$/.test(r)) return lead + r + " ";
     return lead + r + trail;
   }
   function one(p) {

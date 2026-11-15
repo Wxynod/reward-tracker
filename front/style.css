@@ -1704,6 +1704,10 @@ html[data-font="sans"] {
   --font-body: "Noto Sans SC", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", system-ui, sans-serif;
 }
 /* 黑体笔画更满，衬线版本里为宋体设计的大字距收一点，标题更紧凑 */
+/* 英文界面：拉丁字体排在中文字体前面。中文字体会把 “ ” ‘ ’ · — … 这类中西共用的标点画成全角，
+   英文里看起来像中文标点；先用 Noto Serif / Noto Sans 渲染英文和标点，汉字再落到 SC 字体。 */
+html[lang="en"][data-font="serif"] { --font-body: "Noto Serif", "Noto Serif SC", "Songti SC", serif; }
+html[lang="en"][data-font="sans"] { --font-body: "Noto Sans", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif; }
 html[data-font="system"] {
   --font-body: system-ui, -apple-system, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
 }
@@ -1715,8 +1719,8 @@ html:is([data-font="sans"], [data-font="system"]) :is(.rewards-head h2, .section
 .font-row > span { font-size: 13.5px; font-weight: 500; }
 .font-seg button { padding: 3px 11px; font-size: 13px; }
 /* 每个按钮用它自己的字体写名字，切换前就能看出区别 */
-.font-seg .fs-serif { font-family: "Noto Serif SC", "Songti SC", serif; }
-.font-seg .fs-sans { font-family: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif; }
+.font-seg .fs-serif { font-family: "Noto Serif", "Noto Serif SC", "Songti SC", serif; }
+.font-seg .fs-sans { font-family: "Noto Sans", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif; }
 .font-seg .fs-system { font-family: system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; }
 
 /* 切换动画：约 2 秒的幕布。跟随当前白天 / 夜间的纸色和墨色；幕布后面换字体、下载字形，载好了再揭开 */

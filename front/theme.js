@@ -94,11 +94,14 @@
   // ---------------------------------------------------------------- 字体：serif（Noto Serif SC）/ sans（Noto Sans SC）/ system（设备自带），存 rt_font
   const FKEY = "rt_font";
   const FONTS = {
-    serif:  { label: "Serif",  web: "Noto Serif SC", stack: '"Noto Serif SC", "Songti SC", serif' },
-    sans:   { label: "Sans",   web: "Noto Sans SC",  stack: '"Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif' },
+    serif:  { label: "Serif",  web: "Noto Serif SC", latin: "Noto Serif", stack: '"Noto Serif", "Noto Serif SC", "Songti SC", serif' },
+    sans:   { label: "Sans",   web: "Noto Sans SC",  latin: "Noto Sans",  stack: '"Noto Sans", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif' },
     system: { label: "System", web: null, stack: 'system-ui, -apple-system, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif' },
   };
-  const caption = (f) => FONTS[f].web || (document.documentElement.lang === "en" ? "Your device’s font" : "本机系统字体");
+  // 英文界面在首帧前就把 lang 设好：英文时 CSS 先用拉丁字体渲染英文和标点（i18n.js 在页面末尾才运行）
+  try { if (localStorage.getItem("rt_lang") === "en") root.lang = "en"; } catch { /* ignore */ }
+  const isEN = () => root.lang === "en";
+  const caption = (f) => (FONTS[f].web ? (isEN() ? `${FONTS[f].latin} + ${FONTS[f].web}` : FONTS[f].web) : isEN() ? "Your device’s font" : "本机系统字体");
   let font = "serif";
   try { const v = localStorage.getItem(FKEY); if (FONTS[v]) font = v; } catch { /* 隐私模式 */ }
   root.dataset.font = font;
@@ -108,7 +111,8 @@
     const fam = FONTS[f].web;
     if (!fam || !document.fonts) return Promise.resolve();
     const text = [...new Set(((document.body?.innerText || "") + "记账本积分交易权益任务账户分析设置").replace(/\s/g, ""))].slice(0, 2500).join("");
-    return Promise.all([400, 500, 600, 700].map((w) => document.fonts.load(`${w} 16px "${fam}"`, text).catch(() => [])));
+    const fams = isEN() ? [fam, FONTS[f].latin] : [fam];
+    return Promise.all(fams.flatMap((fm) => [400, 500, 600, 700].map((w) => document.fonts.load(`${w} 16px "${fm}"`, text).catch(() => []))));
   }
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   const timeout = (p, ms) => Promise.race([p, wait(ms)]);
@@ -139,7 +143,7 @@
       document.body.appendChild(v);
       const t0 = performance.now();
       const all = preload(f);
-      const word = FONTS[f].web ? timeout(document.fonts.load(`500 56px "${FONTS[f].web}"`, FONTS[f].label), 1500) : null;
+      const word = FONTS[f].web ? timeout(document.fonts.load(`500 56px "${FONTS[f].latin}"`, FONTS[f].label), 1500) : null;
       requestAnimationFrame(() => requestAnimationFrame(() => v.classList.add("in")));
       // 0.55s 后（新字体的字形到了才换）旧名字淡出、新名字浮现
       await Promise.all([wait(550), word]);
