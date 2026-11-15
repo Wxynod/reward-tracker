@@ -649,7 +649,8 @@ const fmtBal = (v, prog) => R.fmtEarned(v, R.PROGRAMS[prog].unit) + unitWord(pro
 function logoSources(issuer, domain) {
   const hit = state.logos[issuer]?.logo || Object.entries(state.logos).find(([name, v]) => R.issuerOf(name) === issuer && v.logo)?.[1].logo;
   const list = [];
-  const bf = domain && B.domainUrl(domain, 128);   // Brandfetch 高清图标优先
+  // Brandfetch 高清图标优先：徽章最大 48px，3 倍屏要 144px；这几家原图最大约 400px，直接要 400，图很小（几 KB）
+  const bf = domain && B.domainUrl(domain, 400);
   if (bf) list.push(bf);
   if (hit) list.push(`data:image/png;base64,${hit}`);
   if (domain) list.push(`https://www.google.com/s2/favicons?domain=${domain}&sz=256`);
