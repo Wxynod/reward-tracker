@@ -9,11 +9,12 @@
   <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
   <link rel="manifest" href="manifest.webmanifest">
   <meta name="theme-color" content="#f6f2ea">
+  <script src="theme.js?v=20261116a"></script>
   <meta name="apple-mobile-web-app-title" content="记账本">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=20261113c">
+  <link rel="stylesheet" href="style.css?v=20261116a">
   <script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"></script>
 </head>
 <body>
@@ -46,6 +47,27 @@
           <section class="lang-sec" data-i18n-skip>
             <h4>语言 · Language</h4>
             <div class="seg lang-seg" role="group" aria-label="Language"><button type="button" data-lang="zh">中文</button><button type="button" data-lang="en">English</button></div>
+          </section>
+          <section id="theme-sec" class="theme-sec">
+            <div class="theme-top">
+              <h4>外观</h4>
+              <div class="seg theme-seg" role="group" aria-label="外观">
+                <button type="button" data-theme-set="light"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M5.3 18.7l1.6-1.6M17.1 6.9l1.6-1.6"/></svg>白天</button>
+                <button type="button" data-theme-set="dark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M20 14.6A8 8 0 0 1 9.4 4a8 8 0 1 0 10.6 10.6Z"/></svg>夜间</button>
+              </div>
+            </div>
+            <label class="theme-auto">
+              <span><b>日出日落自动切换</b><small id="theme-auto-desc" data-i18n-skip></small></span>
+              <input type="checkbox" id="theme-auto" class="switch" role="switch">
+            </label>
+            <div id="theme-sun" class="theme-sun" hidden>
+              <div class="sun-line">
+                <span>日出 <b class="sr" data-i18n-skip></b></span>
+                <span class="sun-arc" aria-hidden="true"><svg viewBox="0 0 100 22" preserveAspectRatio="none"><line x1="0" y1="19" x2="100" y2="19"/><path d="M4 19 Q50 -11 96 19"/></svg><i class="sun-dot"></i></span>
+                <span>日落 <b class="ss" data-i18n-skip></b></span>
+              </div>
+              <div class="theme-src"><span id="theme-src-text" data-i18n-skip></span><button type="button" id="theme-loc" data-i18n-skip></button></div>
+            </div>
           </section>
           <section>
             <h4>积分与余额</h4>
@@ -174,20 +196,20 @@
     </span>
   </div>
   <div id="toast" role="status"></div>
-  <script src="i18n.js?v=20261113c"></script>
-  <script src="config.js?v=20261113c"></script>
-  <script src="maps-key.js?v=20261113c"></script>
-  <script src="icons.js?v=20261113c"></script>
-  <script src="brands.js?v=20261113c"></script>
-  <script src="rewards.js?v=20261113c"></script>
-  <script src="cards.js?v=20261113c"></script>
-  <script src="drill.js?v=20261113c"></script>
-  <script src="analytics.js?v=20261113c"></script>
-  <script src="fx.js?v=20261113c"></script>
-  <script src="app.js?v=20261113c"></script>
-  <script src="detail.js?v=20261113c"></script>
-  <script src="acct.js?v=20261113c"></script>
-  <script src="apple.js?v=20261113c"></script>
-  <script src="calendar.js?v=20261113c"></script>
+  <script src="i18n.js?v=20261116a"></script>
+  <script src="config.js?v=20261116a"></script>
+  <script src="maps-key.js?v=20261116a"></script>
+  <script src="icons.js?v=20261116a"></script>
+  <script src="brands.js?v=20261116a"></script>
+  <script src="rewards.js?v=20261116a"></script>
+  <script src="cards.js?v=20261116a"></script>
+  <script src="drill.js?v=20261116a"></script>
+  <script src="analytics.js?v=20261116a"></script>
+  <script src="fx.js?v=20261116a"></script>
+  <script src="app.js?v=20261116a"></script>
+  <script src="detail.js?v=20261116a"></script>
+  <script src="acct.js?v=20261116a"></script>
+  <script src="apple.js?v=20261116a"></script>
+  <script src="calendar.js?v=20261116a"></script>
 </body>
 </html>

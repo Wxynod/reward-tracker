@@ -5,7 +5,8 @@
 (function () {
   const CAT_COLORS = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6", "#e34948"];
   const OTHER_COLOR = "#a39c90";
-  const HEAT = ["#efe7dc", "#f0c9b8", "#de9580", "#c4614d", "#a3312a"]; // 浅 → 深，单一色相
+  // 浅 → 深，单一色相；用 CSS 变量，夜间模式自动换成暗底 → 亮红的版本
+  const HEAT = ["var(--heat-0)", "var(--heat-1)", "var(--heat-2)", "var(--heat-3)", "var(--heat-4)"];
   const NO_SPEND = new Set(["LOAN_PAYMENTS", "TRANSFER_IN", "TRANSFER_OUT", "INCOME", "BANK_FEES"]);
   const WEEK = ["一", "二", "三", "四", "五", "六", "日"];
 
@@ -262,7 +263,7 @@
         if (date > end) continue;
         const v = day.get(date) || 0, lv = level(v), future = date > today;
         cells += `<rect x="${L + w * (cell + gap)}" y="${T + d * (cell + gap)}" width="${cell}" height="${cell}" rx="3"
-          fill="${future ? "transparent" : lv < 0 ? "#f3eee6" : HEAT[lv]}" class="${future ? "future" : "day-cell"}"
+          style="fill:${future ? "transparent" : lv < 0 ? "var(--heat-z)" : HEAT[lv]}" class="${future ? "future" : "day-cell"}"
           ${future ? "" : `data-tip="${esc(`${bucketLabel(date, "day", true)}|${v ? money(v) : "没有消费"}`)}"`}/>`;
       }
     }
@@ -272,7 +273,7 @@
     const active = vals.length, span = Math.round((parse(today) - parse(start)) / 864e5) + 1;
     return `<h3>消费日历</h3><p class="an-sub">近 26 周，颜色越深当天花得越多 · ${active}/${span} 天有消费${busiest ? ` · 最高 ${bucketLabel(busiest[0], "day")} ${money(busiest[1])}` : ""}</p>
       <div class="cal-wrap"><svg viewBox="0 0 ${W} ${H}" class="chart cal" role="img" aria-label="消费日历">${months}${rows}${cells}</svg></div>
-      <div class="legend heat-legend"><span class="muted">少</span>${["#f3eee6", ...HEAT].map((c) => `<i style="background:${c}"></i>`).join("")}<span class="muted">多</span></div>`;
+      <div class="legend heat-legend"><span class="muted">少</span>${["var(--heat-z)", ...HEAT].map((c) => `<i style="background:${c}"></i>`).join("")}<span class="muted">多</span></div>`;
   }
 
   // ------------------------------------------------------------ 大额消费
@@ -307,7 +308,7 @@
     const vals = Object.values(cell).filter((v) => v > 0).sort((a, c) => a - c);
     const q = (p) => vals[Math.min(vals.length - 1, Math.floor(p * vals.length))];
     const cuts = [q(0.3), q(0.55), q(0.8), q(0.95)];
-    const shade = (v) => (v <= 0 ? "" : `background:${HEAT[cuts.filter((c) => v > c).length]};${cuts.filter((c) => v > c).length >= 3 ? "color:#fff;" : ""}`);
+    const shade = (v) => { if (v <= 0) return ""; const n = cuts.filter((c) => v > c).length; return `background:${HEAT[n]};${n >= 3 ? `color:var(--heat-fg-${n});` : ""}`; };
     const unit = { day: "天", month: "月", quarter: "季", year: "年" }[g];
     // 每类在最近一期 vs 前几期平均的变化，找出异常
     const past = keys.filter((k) => (g === "day" ? k : D.range({ lv: g, k })[0]) <= D.today());
