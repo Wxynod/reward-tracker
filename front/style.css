@@ -1751,3 +1751,44 @@ html[data-theme="dark"] .font-veil { background: color-mix(in srgb, var(--paper)
 .font-veil.done .fv-bar i { animation: none; transform: scaleX(1); transition: transform .25s ease; }
 @keyframes fvBar { to { transform: scaleX(.92); } }
 @keyframes fvWait { 0% { transform: scaleX(.92); opacity: 1; } 50% { opacity: .45; } 100% { transform: scaleX(.92); opacity: 1; } }
+
+/* ================================================================ 标题与大数字：Instrument Serif
+   窄体展示衬线，只有 400 一个字重，所以不加粗，靠放大字号和紧一点的字距撑起层级；
+   不受 Serif / Sans / System 设置影响。只有拉丁字母——汉字（如单位「点」）自动落回当前正文字体。 */
+:root { --font-display: "Instrument Serif", var(--font-body); }
+html[data-font] .brand h1, html[data-font] .login-card h1,
+.pbal, .bal-edit input, .stat .value, .d-amt, .ad-stats b, .up-d b, .hkt-nums b {
+  font-family: var(--font-display);
+  font-weight: 400; font-synthesis: none;
+  font-variant-numeric: lining-nums proportional-nums;
+  letter-spacing: 0;
+}
+/* 品牌名：始终 Reward Tracker */
+html[data-font] .brand h1 { font-size: 42px; line-height: 1; letter-spacing: -.005em; }
+html[data-font] .login-card h1 { font-size: 44px; line-height: 1.05; letter-spacing: -.005em; margin-bottom: 6px; }
+/* 大数字：原来 600–700 粗体，换成 400 的窄体后放大约 1.25 倍 */
+.pbal { font-size: 40px; line-height: 1.05; }
+.bal-edit input { font-size: 32px; }
+.stat .value { font-size: 28px; line-height: 1.15; }
+.an-kpis.small .value { font-size: 24px; }
+.d-amt { font-size: 34px; line-height: 1.05; }
+.ad-stats b { font-size: 25px; line-height: 1.15; }
+.up-d b { font-size: 28px; line-height: 1; }
+.hkt-nums b { font-size: 26px; line-height: 1.1; }
+/* 数字旁边的小字（单位、币种、美元换算）保持正文字体 */
+:is(.pbal, .stat .value, .d-amt, .ad-stats, .up-d, .hkt-nums) :is(small, i, em, .usd, .orig, .d-orig) {
+  font-family: var(--font-body); font-variant-numeric: tabular-nums;
+}
+.d-amt small { letter-spacing: .1em; }
+@media (max-width: 640px) {
+  .d-amt { font-size: 36px; }
+  .ad-stats b { font-size: 20px; letter-spacing: 0; }
+  .up-d b { font-size: 25px; }
+}
+@media (max-width: 560px) {
+  html[data-font] .brand h1 { font-size: 34px; }
+  .stat .value { font-size: 22px; }
+  .an-kpis .value { font-size: 23px; }
+  .rewards-head ~ * .pbal, .pbal { font-size: 36px; }
+}
+@media (max-width: 700px) { .hkt-nums b { font-size: 22px; } }
