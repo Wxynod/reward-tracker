@@ -2061,7 +2061,11 @@ body:has(#weekly:not([hidden])) #txn-detail { z-index: 96; }
 .wk-row-amt b { font-family: var(--font-display); font-weight: 400; font-size: 20px; white-space: nowrap; font-variant-numeric: lining-nums proportional-nums; }
 .wk-row-amt small { font-size: 11px; color: var(--muted); white-space: nowrap; }
 .wk-chg.up { color: var(--seal); } .wk-chg.down { color: var(--jade); }
-.wk-row.more b { font-weight: 400; color: var(--muted); }
+.wk-row.more { grid-template-columns: minmax(0, 1fr) auto; width: 100%; font: inherit; color: var(--muted); background: none; border-left: 0; border-right: 0; border-bottom: 0; text-align: left; cursor: pointer; padding: 11px 4px; }
+.wk-row.more:hover { background: var(--tint); color: var(--ink); }
+.wk-row.more span { font-size: 13.5px; }
+.wk-row.more span::after { content: " ↓"; }
+.wk-row.more b { font-family: var(--font-display); font-weight: 400; font-size: 20px; color: inherit; white-space: nowrap; font-variant-numeric: lining-nums proportional-nums; }
 .wk-txn { cursor: pointer; transition: background .15s; }
 .wk-txn:hover { background: rgb(var(--hov) / .04); }
 .wk-txn:focus-visible { outline: 2px solid var(--seal); outline-offset: 1px; }

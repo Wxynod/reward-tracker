@@ -191,7 +191,7 @@
   }
 
   // ------------------------------------------------------------ 完整周报
-  const ui = { ws: null, view: "cat", archive: false, menu: false, dir: 0 };
+  const ui = { ws: null, view: "cat", archive: false, menu: false, dir: 0, all: false };
 
   function report() {
     const all = cards(), sel = selected(), ids = new Set(sel.map((a) => a.id));
@@ -226,7 +226,8 @@
     const cur = [...groupBy(st.list, ui.view === "cat" ? catKey : merchKey).values()];
     const prevG = groupBy(prev.list, ui.view === "cat" ? catKey : merchKey);
     const rows = cur.filter((g) => g.v > 0.004).sort((a, b) => b.v - a.v);
-    const shown = rows.slice(0, 8), rest = rows.slice(8);
+    const cut = ui.all || rows.length <= 10 ? rows.length : 8;
+    const shown = rows.slice(0, cut), rest = rows.slice(cut);
     const biggest = st.list.filter((t) => t.amount > 0).sort((a, b) => b.amount - a.amount).slice(0, 5);
     const earn = weekEarn(st.list);
     const avg = st.net / 7, pavg = prev.net / 7;
@@ -282,7 +283,7 @@
             <div class="seg wk-seg">${[["cat", L("按类别", "By category")], ["merch", L("按商户", "By merchant")]].map(([v, l]) =>
               `<button data-wk-view="${v}" class="${ui.view === v ? "on" : ""}">${l}</button>`).join("")}</div>
           </div>
-          ${shown.length ? `<div class="wk-rows">${shown.map(listRow).join("")}${rest.length ? `<div class="wk-row more"><div class="wk-row-main"><b>${L(`其他 ${rest.length} 项`, `${rest.length} more`)}</b></div><div class="wk-row-amt"><b>${esc(money(rest.reduce((s, g) => s + g.v, 0)))}</b></div></div>` : ""}</div>`
+          ${shown.length ? `<div class="wk-rows">${shown.map(listRow).join("")}${rest.length ? `<button class="wk-row more" data-wk-all><span>${ui.view === "cat" ? L(`展开其余 ${rest.length} 个类别`, `Show ${rest.length} more categories`) : L(`展开其余 ${rest.length} 个商户`, `Show ${rest.length} more merchants`)}</span><b>${esc(money(rest.reduce((s, g) => s + g.v, 0)))}</b></button>` : ""}</div>`
             : `<p class="wk-none">${L("这一周没有消费。", "No spending this week.")}</p>`}
         </section>
 
@@ -367,7 +368,8 @@
     const g = e.target.closest("[data-wk-go]");
     if (g) { const w = g.dataset.wkGo; ui.archive = false; return go(w, w > ui.ws ? 1 : -1); }
     const v = e.target.closest("[data-wk-view]");
-    if (v) { ui.view = v.dataset.wkView; return paint(); }
+    if (v) { ui.view = v.dataset.wkView; ui.all = false; return paint(); }
+    if (e.target.closest("[data-wk-all]")) { ui.all = true; return paint(); }
     const t = e.target.closest("[data-wk-txn]");
     if (t) return openTxn(t.dataset.wkTxn);
     // 点在菜单外面：收起菜单
@@ -381,7 +383,7 @@
     el.querySelector("[data-wk-archive]")?.setAttribute("aria-expanded", String(ui.archive));
   }
 
-  function go(ws, dir) { if (ws === ui.ws) return; ui.ws = ws; ui.dir = dir; ui.menu = false; paint(); ui.dir = 0; }
+  function go(ws, dir) { if (ws === ui.ws) return; ui.ws = ws; ui.dir = dir; ui.menu = false; ui.all = false; paint(); ui.dir = 0; }
 
   // 只换数据、保留下拉菜单打开的状态（勾选时菜单不闪）
   function refresh({ keepMenu } = {}) {
@@ -436,7 +438,7 @@
 
   function open() {
     const el = shell();
-    ui.ws = latestWeek(); ui.menu = false; ui.archive = false; ui.dir = 0; prevTotal = null;
+    ui.ws = latestWeek(); ui.menu = false; ui.archive = false; ui.dir = 0; ui.all = false; prevTotal = null;
     el.hidden = false;
     paint();
     document.documentElement.classList.add("d-lock");
