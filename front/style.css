@@ -1794,3 +1794,42 @@ html[data-font] .login-card h1 { font-size: 44px; line-height: 1.05; letter-spac
   .rewards-head ~ * .pbal, .pbal { font-size: 36px; }
 }
 @media (max-width: 700px) { .hkt-nums b { font-size: 22px; } }
+
+/* ================================================================ 专有名词：Instrument Serif
+   积分计划、机构、卡名、尾号、商户名这些不会翻译的拉丁文字，用 Instrument Serif。
+   "RT Name" 是同一套字体文件的别名，带 size-adjust：窄体在同字号下比 Noto 小一号，
+   这里只把拉丁字形放大约 1.2 倍，名字里夹的汉字落回正文字体、保持原来的大小。
+   只有 400 一个字重：原来 500–600 的名字不再加粗，靠字体本身的反差和墨色区分。
+   主名称用正体，发卡机构等副名称用斜体。 */
+@font-face { font-family: "RT Name"; font-style: normal; font-weight: 400; font-display: swap; size-adjust: 122%;
+  src: local("Instrument Serif"), url(https://fonts.gstatic.com/s/instrumentserif/v5/jizBRFtNs2ka5fXjeivQ4LroWlx-6zUTjg.woff2) format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "RT Name"; font-style: normal; font-weight: 400; font-display: swap; size-adjust: 122%;
+  src: url(https://fonts.gstatic.com/s/instrumentserif/v5/jizBRFtNs2ka5fXjeivQ4LroWlx-6zsTjmbI.woff2) format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "RT Name"; font-style: italic; font-weight: 400; font-display: swap; size-adjust: 122%;
+  src: local("Instrument Serif Italic"), url(https://fonts.gstatic.com/s/instrumentserif/v5/jizHRFtNs2ka5fXjeivQ4LroWlx-6zAjjH7M.woff2) format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "RT Name"; font-style: italic; font-weight: 400; font-display: swap; size-adjust: 122%;
+  src: url(https://fonts.gstatic.com/s/instrumentserif/v5/jizHRFtNs2ka5fXjeivQ4LroWlx-6zAjgn7MsNo.woff2) format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+:root { --font-name: "RT Name", var(--font-body); }
+
+/* 主名称：积分计划、机构、卡名、商户 */
+.pname, .inst-name, .acct-name, .txn .tname, .d-title h3, .ad-id h3, .er-title, .period-table tbody th > span,
+.hkt-title h3, .ag-name, .up-c > span:last-child, .d-card b, .csel-label .cname, .mname {
+  font-family: var(--font-name); font-weight: 400; font-synthesis: none; font-variant-numeric: lining-nums; letter-spacing: .005em;
+}
+.txn .tname, .acct-name { color: var(--ink); }
+/* 副名称：发卡机构，用斜体 */
+.pissuer, .hkt-title .meta, .d-card small, .er-title .meta, .csel-label .cinst {
+  font-family: var(--font-name); font-style: italic; font-weight: 400; font-synthesis: none; letter-spacing: .01em;
+}
+.pissuer { font-size: 13px; }
+/* 计划名、银行名原来靠粗体撑，换成 400 后再放大一档 */
+.pname { font-size: 19px; line-height: 1.2; }
+.inst-head h3 .inst-name { font-size: 20px; }
+/* 尾号 ··8186：正体、灰色 */
+.acct-name .mask, .ad-id h3 span, .ag-name small, .csel-label .cname small { font-family: var(--font-name); font-style: normal; }
+/* 名字里夹的中文标签 / 计数保持正文字体 */
+.er-title :is(.tag, .warn-tag), .mname small { font-family: var(--font-body); font-style: normal; letter-spacing: 0; }

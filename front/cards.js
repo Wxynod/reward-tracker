@@ -303,7 +303,8 @@
     const cur = sel.selectedOptions[0] || opts[0];
     const label = (o) => {
       const a = state.accounts[o.value];
-      return a ? `<b>${esc(cardName(a))}${a.mask ? ` <small>··${esc(a.mask)}</small>` : ""}</b><small>${esc(a.institution)}</small>` : `<b>${esc(o.textContent)}</b>`;
+      // 真实卡名 / 机构用 Instrument Serif（.cname / .cinst）；「全部卡片」这类会翻译的选项保持正文字体
+      return a ? `<b class="cname">${esc(cardName(a))}${a.mask ? ` <small>··${esc(a.mask)}</small>` : ""}</b><small class="cinst">${esc(a.institution)}</small>` : `<b>${esc(o.textContent)}</b>`;
     };
     wrap.innerHTML = `<button type="button" class="csel-btn">${optionFace(cur?.value, "xs")}<span class="csel-label">${cur ? label(cur) : ""}</span><svg class="caret" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg></button>
       <div class="csel-menu" role="listbox">${opts.map((o) => `<div class="csel-opt ${o.value === sel.value ? "on" : ""}" role="option" data-v="${esc(o.value)}">${optionFace(o.value, "xs")}<span class="csel-label">${label(o)}</span></div>`).join("")}</div>`;
