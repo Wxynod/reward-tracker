@@ -348,6 +348,7 @@ function render() {
   window.RT_CARDS?.enhanceAll();
   window.RT_ACCT?.refresh();
   window.RT_CAL?.refresh();
+  window.RT_WEEKLY?.refresh();
 }
 
 function renderAccountSelects() {

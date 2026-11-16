@@ -86,6 +86,7 @@
     const inRange = all.filter((t) => t.date >= from && t.date <= to);
 
     root.innerHTML = `
+      <div id="wk-entry">${window.RT_WEEKLY?.entry() || ""}</div>
       <div class="an-filters">
         <select id="an-card" data-cardselect><option value="">全部卡片</option>${cards.map((c) =>
           `<option value="${esc(c.id)}" ${c.id === ui.card ? "selected" : ""}>${esc(c.label)}</option>`).join("")}</select>
