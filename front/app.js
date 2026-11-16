@@ -91,8 +91,8 @@ function fxDescription(x) {
   if (!x.fx) return `按 1 USD = ${FX_PER_USD[x.orig_currency]} ${x.orig_currency} 换算成美元显示`;
   const { date, rate } = x.fx;
   const cur = x.orig_currency || "CNY";
-  const src = FX_SRC[x.fx.src || x.fx.source] || "ECB";
-  const source = date ? `${src} ${date}` : RT_I18N.t("估算汇率");
+  const src = FX_SRC[x.fx.src || x.fx.source];
+  const source = !date ? RT_I18N.t("估算汇率") : src ? `${src} ${date}` : date;
   return `${source} · 1 USD = ${rate} ${cur} · 1 ${cur} = ${(1 / rate).toFixed(6)} USD`;
 }
 // 港币原值的小字（没有换算过的账户返回空）

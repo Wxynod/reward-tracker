@@ -2,6 +2,7 @@
 // · 人民币：只用于汇丰 Pulse 人民币户口（hsbc_pulse_cny），欧洲央行（ECB）每日参考价。
 // · 港币：所有港币户口和港币交易，优先用香港金管局（HKMA）每日收盘价；金管局按月发布、会滞后几周，
 //   它还没公布的近期日期先用 ECB 当天的美元兑港币参考价补上，金管局公布后自动换回金管局价。
+//   正常情况下由 Worker 每天刷新并存进 KV，随 /api/data 一起下发；后端没有数据时浏览器才自己去取。
 // 都通过 Frankfurter（api.frankfurter.dev），浏览器按年缓存；当年数据缓存一小时，已过去的年份取到后复用。
 // 取不到报价、或最近的报价离交易日超过 7 天时，临时用固定汇率（CNY 7.1 / HKD 7.8），页面提示「含估算值」。
 const pulseCnyId = "hsbc_pulse_cny";
@@ -75,19 +76,28 @@ const pulseRates = (() => {
 })();
 
 const hkdRates = (() => {
-  let estimated = false, active = false;
+  let estimated = false, active = false, table = null, days = [];
   const hkma = rateSeries("HKMA", "HKD", "rt_hkma_hkd_v1_");
   const ecb = rateSeries("ECB", "HKD", "rt_ecb_hkd_v1_");
+  // 后端（Worker 每天刷新的 fx:usd_hkd）给的整张表：日期 → 汇率，金管局价已覆盖 ECB 补位
+  function fromTable(day) {
+    let lo = 0, hi = days.length - 1, hit = null;
+    while (lo <= hi) { const mid = (lo + hi) >> 1; if (days[mid] <= day) { hit = days[mid]; lo = mid + 1; } else hi = mid - 1; }
+    return hit ? { date: hit, rate: table[hit] } : null;
+  }
+  // 后端还没部署 / 没数据时，浏览器自己取：金管局覆盖到的日期用金管局价，之后用 ECB
+  function fromBrowser(day) {
+    const lastHkma = hkma.last();
+    const hit = lastHkma && day <= lastHkma ? hkma.at(day) : ecb.at(day);
+    if (hit && !stale(day, hit)) return hit;
+    const h2 = hkma.at(day);
+    return h2 && !stale(day, h2) ? h2 : hit;
+  }
   function quote(day) {
     if (!isoDay.test(day || "")) day = today();
-    const lastHkma = hkma.last();
-    // 金管局已经覆盖到的日期用金管局价；之后的近期日期用 ECB 补
-    const hit = lastHkma && day <= lastHkma ? { ...hkma.at(day), src: "HKMA" } : (() => { const h = ecb.at(day); return h ? { ...h, src: "ECB" } : null; })();
-    if (hit?.date && !stale(day, hit)) return hit;
-    const h2 = hkma.at(day);
-    if (h2 && !stale(day, h2)) return { ...h2, src: "HKMA" };
-    estimated = true;
-    return hit?.date ? hit : { date: null, rate: FX_PER_USD.HKD, src: null };
+    const hit = table ? fromTable(day) : fromBrowser(day);
+    if (stale(day, hit)) estimated = true;
+    return hit ? { date: hit.date, rate: hit.rate } : { date: null, rate: FX_PER_USD.HKD };
   }
   async function prepare(data) {
     estimated = false;
@@ -96,6 +106,14 @@ const hkdRates = (() => {
     for (const a of accts) dates.push(a.balance_as_of?.slice(0, 10), a.liability?.last_statement_issue_date, a.liability?.last_payment_date);
     for (const t of data.transactions) if (t.currency === "HKD") dates.push(t.authorized_date || t.date);
     active = dates.some(Boolean);
+    const rates = data.fx?.usd_hkd?.rates;
+    if (rates && typeof rates === "object") {
+      table = {};
+      for (const [d, r] of Object.entries(rates)) if (isoDay.test(d) && Number.isFinite(r) && r > 0) table[d] = r;
+      days = Object.keys(table).sort();
+      if (days.length) return;
+    }
+    table = null; days = [];
     if (!active) return;
     dates.push(today());
     const ys = yearsOf(dates);

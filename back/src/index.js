@@ -36,6 +36,10 @@ export default {
       return json({ error: err.message, plaid: err.plaid || null }, err.status || 500, cors);
     }
   },
+  // 每天定时刷新港币汇率（wrangler.toml [triggers] crons）
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(refreshHkdRates(env).catch((e) => console.error("hkd fx", e.message)));
+  },
 };
 
 // ---------------------------------------------------------------- routes
@@ -390,7 +394,71 @@ async function loadAll(env) {
     getJSON(env, "rewards", { cards: {}, rules: {}, balances: {}, closing: {}, cardface: {}, ignore: { ids: {}, names: [] } }),
     getJSON(env, "tracker:amex_hk", null),
   ]);
-  return { env: env.PLAID_ENV || "sandbox", items, transactions, benefits, rewards, trackers: { amex_hk: amexHk } };
+  return { env: env.PLAID_ENV || "sandbox", items, transactions, benefits, rewards, trackers: { amex_hk: amexHk },
+    fx: { usd_hkd: await hkdRatesForData(env) } };
+}
+
+// ---- 港币每日汇率（每 1 美元兑多少港币）----
+// KV fx:usd_hkd = { rates: { 日期: [汇率, "H" | "E"] }, hkma_through, ecb_dates, updated_at }
+// H = 香港金管局收盘价；E = 金管局还没公布时用的 ECB 参考价（ecb_dates 记录这些日期）。
+// 每天刷新：重新拉 ecb_dates 一带的金管局数据，金管局一公布就覆盖掉对应的 E；
+// 金管局最后日期之前的 E 一律删除（节假日按金管局前一日收盘价算），之后的近期日期继续用 ECB 补。
+const HKD_FX_KEY = "fx:usd_hkd";
+const HKD_FX_START = "2022-12-15";
+const shiftDay = (day, n) => new Date(Date.parse(day) + n * 86400000).toISOString().slice(0, 10);
+
+async function fetchUsdRates(provider, currency, from, to) {
+  const params = new URLSearchParams({ base: "USD", quotes: currency, providers: provider, from, to });
+  const res = await fetch("https://api.frankfurter.dev/v2/rates?" + params, { signal: AbortSignal.timeout(15000) });
+  if (!res.ok) throw new Error(`${provider} ${res.status}`);
+  return (await res.json()).filter(r => r.base === "USD" && r.quote === currency &&
+    dateOrNull(r.date) && Number.isFinite(r.rate) && r.rate > 0);
+}
+
+async function refreshHkdRates(env, store) {
+  store = store || await getJSON(env, HKD_FX_KEY, null);
+  const rates = { ...(store?.rates || {}) };
+  const today = new Date().toISOString().slice(0, 10);
+  const pending = Object.keys(rates).filter(d => rates[d][1] === "E").sort();
+  const anchor = pending[0] || store?.hkma_through;
+  const hkmaFrom = anchor ? shiftDay(anchor < today ? anchor : today, -31) : HKD_FX_START;
+  let changed = false;
+  try {
+    for (const r of await fetchUsdRates("HKMA", "HKD", hkmaFrom, today)) {
+      const cur = rates[r.date];
+      if (!cur || cur[0] !== r.rate || cur[1] !== "H") { rates[r.date] = [r.rate, "H"]; changed = true; }
+    }
+  } catch (e) { console.error("HKMA", e.message); }
+  let hkmaThrough = null;
+  for (const d of Object.keys(rates)) if (rates[d][1] === "H" && (!hkmaThrough || d > hkmaThrough)) hkmaThrough = d;
+  for (const d of Object.keys(rates)) if (rates[d][1] === "E" && hkmaThrough && d <= hkmaThrough) { delete rates[d]; changed = true; }
+  try {
+    const ecbFrom = hkmaThrough ? shiftDay(hkmaThrough, 1) : HKD_FX_START;
+    if (ecbFrom <= today) for (const r of await fetchUsdRates("ECB", "HKD", ecbFrom, today)) {
+      if (rates[r.date]?.[1] === "H") continue;
+      const cur = rates[r.date];
+      if (!cur || cur[0] !== r.rate) { rates[r.date] = [r.rate, "E"]; changed = true; }
+    }
+  } catch (e) { console.error("ECB", e.message); }
+  const next = {
+    rates, hkma_through: hkmaThrough,
+    ecb_dates: Object.keys(rates).filter(d => rates[d][1] === "E").sort(),
+    updated_at: new Date().toISOString(),
+  };
+  if (changed || !store || Date.now() - Date.parse(store.updated_at || 0) > 6 * 3600000) await putJSON(env, HKD_FX_KEY, next);
+  return next;
+}
+
+// /api/data 带上整张表；定时任务没跑过或超过两天没更新时，当场刷新一次
+async function hkdRatesForData(env) {
+  let store = await getJSON(env, HKD_FX_KEY, null);
+  if (!store || Date.now() - Date.parse(store.updated_at || 0) > 2 * 86400000) {
+    try { store = await refreshHkdRates(env, store); } catch (e) { console.error("hkd fx", e.message); }
+  }
+  if (!store || !Object.keys(store.rates || {}).length) return null;
+  const out = {};
+  for (const [d, [rate]] of Object.entries(store.rates)) out[d] = rate;
+  return { rates: out, updated_at: store.updated_at };
 }
 
 // 「不计入分析」规则：ids = { 交易 id: true }；names = [{ name, label, from, to }]，from/to 为 YYYY-MM-DD 或都为 null（全部同名）
