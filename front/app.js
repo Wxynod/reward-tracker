@@ -14,7 +14,7 @@ window.brandFail = (img) => {
   img.nextElementSibling?.remove();
   img.remove();
 };
-const EMPTY_REWARDS = () => ({ cards: {}, rules: {}, balances: {}, closing: {}, cardface: {} });
+const EMPTY_REWARDS = () => ({ cards: {}, rules: {}, balances: {}, closing: {}, cardface: {}, ignore: { ids: {}, names: [] } });
 
 // ---------------------------------------------------------------- 非美元账户（香港 Amex，港币）
 // 美元金额用于汇总。Pulse 人民币使用交易日参考价，原币金额保留用于展示和核账。
@@ -430,9 +430,10 @@ function txnRow(t) {
     : "";
   // 支付渠道（Plaid payment_channel）：in store 线下 / online 线上 / other 其他；待入账整行变灰
   const ch = CHANNELS[t.channel] || null;
-  const tags = `${t.pending ? '<span class="ttag pending" title="Pending：银行已授权、尚未入账，金额和商户名可能还会变">待入账</span>' : ""}` +
+  const ignored = window.RT_IGNORE?.match(t, state.editing ? state.draft?.ignore : undefined);
+  const tags = `${t.pending ? '<span class="ttag pending" title="Pending：银行已授权、尚未入账，金额和商户名可能还会变">待入账</span>' : ""}` + (window.RT_IGNORE?.tag(t) || "") +
     (ch ? `<span class="ttag ${ch.cls}" title="${ch.tip}">${ch.icon}${ch.label}</span>` : "");
-  return `<div class="txn${t.pending ? " is-pending" : ""}" data-txn="${esc(t.id)}" tabindex="0" role="button" aria-label="查看 ${esc(title)} 的明细">
+  return `<div class="txn${t.pending ? " is-pending" : ""}${ignored ? " is-ignored" : ""}" data-txn="${esc(t.id)}" tabindex="0" role="button" aria-label="查看 ${esc(title)} 的明细">
     <div class="cat-icon" style="--c:${ic.color}" title="${esc(ic.label)}${t.mcc ? " · MCC " + esc(t.mcc) : ""}">${I.svg(ic.icon)}${brand}</div>
     <div class="txn-main">
       <div class="title"><span class="tname">${esc(title)}</span>${tags ? `<span class="ttags">${tags}</span>` : ""}</div>
@@ -442,6 +443,7 @@ function txnRow(t) {
       <div class="amt ${t.amount < 0 ? "in" : ""}">${amt}</div>
       ${t.orig_currency ? `<div class="amt-orig">${esc(txnAmt(t, true))}</div>` : ""}
       ${earnCell(t)}
+      ${window.RT_IGNORE?.cell(t) || ""}
     </div>
   </div>`;
 }
@@ -965,6 +967,8 @@ function renderSettings() {
       <button class="btn small ghost" data-unrule="${esc(r.acct)}|${esc(r.key)}">删除</button>
     </div>`;
   }).join("") : `<p class="hint">还没有。编辑模式下改过的倍数会出现在这里。</p>`;
+  const il = $("#ignore-list");
+  if (il && window.RT_IGNORE) il.innerHTML = RT_IGNORE.settingsList();
 }
 
 async function saveRewards(next, okMsg) {
@@ -976,7 +980,8 @@ async function saveRewards(next, okMsg) {
 
 function setEditing(on) {
   state.editing = on;
-  state.draft = on ? { rates: {}, balances: {} } : null;
+  // ignore：「不计入分析」规则的草稿，保存时整体写回
+  state.draft = on ? { rates: {}, balances: {}, ignore: JSON.parse(JSON.stringify(state.rewards.ignore || { ids: {}, names: [] })) } : null;
   $("#editbar").hidden = !on;
   $("#btn-edit").textContent = on ? "保存" : "更新";
   render();
@@ -1001,12 +1006,15 @@ async function saveEdit() {
     next.balances[k] = { value: v, updated: today() };
     bal++;
   }
+  const ign = JSON.stringify(state.draft.ignore) !== JSON.stringify(state.rewards.ignore || { ids: {}, names: [] });
+  if (ign) next.ignore = state.draft.ignore;
   state.editing = false; state.draft = null;
   $("#editbar").hidden = true; $("#btn-edit").textContent = "更新";
-  if (!changed && !bal) { render(); return toast("没有改动"); }
+  if (!changed && !bal && !ign) { render(); return toast("没有改动"); }
   const parts = [];
   if (changed) parts.push(`${changed} 条倍数已记住`);
   if (bal) parts.push(`${bal} 个余额已更新`);
+  if (ign) parts.push("不计入分析的设置已更新");
   await saveRewards(next, `已保存：${parts.join("，")}`);
 }
 

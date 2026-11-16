@@ -61,11 +61,11 @@
     }));
   }
 
-  // 消费 = 信用卡上的购物净额（退款冲减；还款、转账、费用、权益返现不算）
+  // 消费 = 信用卡上的购物净额（退款冲减；还款、转账、费用、权益返现、手动设为「不计入分析」的不算）
   function spendTxns() {
     const credit = new Set(creditAccounts().map((a) => a.id));
     return state.txns.filter((t) =>
-      credit.has(t.account_id) && !NO_SPEND.has(t.category) && !R.isBenefitCredit(t) && !R.isAnnualFee(t) &&
+      credit.has(t.account_id) && !NO_SPEND.has(t.category) && !R.isBenefitCredit(t) && !R.isAnnualFee(t) && !window.RT_IGNORE?.isIgnored(t) &&
       (!ui.card || t.account_id === ui.card));
   }
 
@@ -335,7 +335,7 @@
   // ------------------------------------------------------------ 单卡分析
   function singleCard(cards, from, today) {
     const credit = new Set(creditAccounts().map((a) => a.id));
-    const spendOf = (id) => state.txns.filter((t) => t.account_id === id && credit.has(id) && !NO_SPEND.has(t.category) && !R.isBenefitCredit(t));
+    const spendOf = (id) => state.txns.filter((t) => t.account_id === id && credit.has(id) && !NO_SPEND.has(t.category) && !R.isBenefitCredit(t) && !window.RT_IGNORE?.isIgnored(t));
     // 默认选：上方筛选的卡；否则所选时间内消费最多的卡
     let id = ui.single || ui.card;
     if (!id || !cards.some((c) => c.id === id)) {

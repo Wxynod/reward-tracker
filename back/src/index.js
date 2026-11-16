@@ -158,6 +158,7 @@ const ROUTES = {
       balances: r.balances && typeof r.balances === "object" ? r.balances : {},
       closing: r.closing && typeof r.closing === "object" ? r.closing : {}, // 每张卡的账单日（1–31）
       cardface: r.cardface && typeof r.cardface === "object" ? r.cardface : {}, // 每张卡选的卡面样式
+      ignore: cleanIgnore(r.ignore), // 「不计入分析」：单笔交易 id / 同名交易（可带日期范围）
     };
     if (JSON.stringify(clean).length > 200_000) throw httpError(413, "rewards too large");
     await putJSON(env, "rewards", clean);
@@ -386,10 +387,29 @@ async function loadAll(env) {
   transactions.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
   const [benefits, rewards, amexHk] = await Promise.all([
     getJSON(env, "benefits", []),
-    getJSON(env, "rewards", { cards: {}, rules: {}, balances: {}, closing: {}, cardface: {} }),
+    getJSON(env, "rewards", { cards: {}, rules: {}, balances: {}, closing: {}, cardface: {}, ignore: { ids: {}, names: [] } }),
     getJSON(env, "tracker:amex_hk", null),
   ]);
   return { env: env.PLAID_ENV || "sandbox", items, transactions, benefits, rewards, trackers: { amex_hk: amexHk } };
+}
+
+// 「不计入分析」规则：ids = { 交易 id: true }；names = [{ name, label, from, to }]，from/to 为 YYYY-MM-DD 或都为 null（全部同名）
+function cleanIgnore(v) {
+  const out = { ids: {}, names: [] };
+  if (!v || typeof v !== "object") return out;
+  const isDate = (s) => typeof s === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s);
+  if (v.ids && typeof v.ids === "object" && !Array.isArray(v.ids)) {
+    for (const id of Object.keys(v.ids).slice(0, 5000)) if (id.length <= 200 && v.ids[id]) out.ids[id] = true;
+  }
+  if (Array.isArray(v.names)) {
+    for (const r of v.names.slice(0, 500)) {
+      if (!r || typeof r.name !== "string" || !r.name.trim() || r.name.length > 200) continue;
+      const all = r.from == null && r.to == null;
+      if (!all && !(isDate(r.from) && isDate(r.to) && r.from <= r.to)) throw httpError(400, "ignore range: start must be on or before end");
+      out.names.push({ name: r.name.trim().toLowerCase(), label: String(r.label || r.name).slice(0, 200), from: all ? null : r.from, to: all ? null : r.to });
+    }
+  }
+  return out;
 }
 
 const slimTxn = (t) => ({

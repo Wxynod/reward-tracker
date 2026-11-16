@@ -45,7 +45,7 @@
   // ------------------------------------------------------------ 数据
   // 消费 = 信用卡上的购物净额（退款冲减；还款、转账、费用、年费、权益返现不算），和「分析」页口径一致
   function spendOf(ids) {
-    return state.txns.filter((t) => ids.has(t.account_id) && !NO_SPEND.has(t.category) && !R.isBenefitCredit(t) && !R.isAnnualFee(t));
+    return state.txns.filter((t) => ids.has(t.account_id) && !NO_SPEND.has(t.category) && !R.isBenefitCredit(t) && !R.isAnnualFee(t) && !window.RT_IGNORE?.isIgnored(t));
   }
   function weeksIndex(list) {
     const by = new Map();
