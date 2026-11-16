@@ -54,7 +54,7 @@ export default {
 // ---------------------------------------------------------------- routes
 
 // 周日 21:07（香港时间）推送周报
-const WEEKLY_CRON = "7 13 * * 0";
+const WEEKLY_CRON = "7 13 * * SUN";
 
 async function syncAllItems(env) {
   const ids = await getJSON(env, "items", []);
