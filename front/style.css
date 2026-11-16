@@ -1757,7 +1757,7 @@ html[data-theme="dark"] .font-veil { background: color-mix(in srgb, var(--paper)
    不受 Serif / Sans / System 设置影响。只有拉丁字母——汉字（如单位「点」）自动落回当前正文字体。 */
 :root { --font-display: "Instrument Serif", var(--font-body); }
 html[data-font] .brand h1, html[data-font] .login-card h1,
-.pbal, .bal-edit input, .stat .value, .d-amt, .ad-stats b, .up-d b, .hkt-nums b {
+.pbal, .bal-edit input, .stat .value, .d-amt, .ad-stats b, .up-d b, .hkt-nums b, .txn .amt {
   font-family: var(--font-display);
   font-weight: 400; font-synthesis: none;
   font-variant-numeric: lining-nums proportional-nums;
@@ -1775,6 +1775,8 @@ html[data-font] .login-card h1 { font-size: 44px; line-height: 1.05; letter-spac
 .ad-stats b { font-size: 25px; line-height: 1.15; }
 .up-d b { font-size: 28px; line-height: 1; }
 .hkt-nums b { font-size: 26px; line-height: 1.1; }
+/* 交易列表的金额；下面的积分、美元换算小字不变 */
+.txn .amt { font-size: 20px; line-height: 1.15; }
 /* 数字旁边的小字（单位、币种、美元换算）保持正文字体 */
 :is(.pbal, .stat .value, .d-amt, .ad-stats, .up-d, .hkt-nums) :is(small, i, em, .usd, .orig, .d-orig) {
   font-family: var(--font-body); font-variant-numeric: tabular-nums;
