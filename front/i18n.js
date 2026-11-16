@@ -18,6 +18,7 @@
   const DICT = {
     "估算汇率": "Estimated rate",
     "部分人民币日期缺少近期报价，美元汇总含估算值。": "Recent quotes are unavailable for some CNY dates. USD totals include estimates.",
+    "部分人民币 / 港币日期缺少近期报价，美元汇总含估算值。": "Recent quotes are unavailable for some CNY / HKD dates. USD totals include estimates.",
     "消费按交易日参考汇率折算，未偿欠款按加权成本折算，余额快照按快照日折算。": "Spending uses transaction-date reference rates, outstanding debt uses weighted average cost, and balance snapshots use their dated rate.",
     // 顶栏 / 标签页 / 登录
     "记账本": "Reward Tracker", "记账本 · Reward Tracker": "Reward Tracker",
@@ -204,6 +205,8 @@
     "非 Plaid": "Not via Plaid", "没有通过 Plaid 连接，交易由脚本导入": "Not linked via Plaid; transactions are imported by a script",
     "香港": "Hong Kong", "香港发行": "Issued in Hong Kong", "没有": "None", "上次导入": "Last imported",
     "没有通过 Plaid 连接。": "Not linked via Plaid.", "没有通过 Plaid 连接": "Not linked via Plaid",
+    "历史交易来自月结单，新交易在你打开 Amex 网银时由脚本推送；金额以港币显示，美元小字按交易日的金管局 USD/HKD 收盘价换算；没有 MCC，本站不估算积分。点开卡片看详情。":
+      "History comes from monthly statements; new transactions are pushed by a script when you open Amex online banking. Amounts are shown in HKD, with USD in small print at the HKMA USD/HKD closing rate of each transaction date. No MCC, so points are not estimated here. Open a card for details.",
     "历史交易来自月结单，新交易在你打开 Amex 网银时由脚本推送；金额以港币显示，美元小字按 1 USD = 7.8 HKD 换算；没有 MCC，本站不估算积分。点开卡片看详情。":
       "History comes from monthly statements; new transactions are pushed by a script when you open Amex online banking. Amounts are shown in HKD, with USD in small print at a fixed 1 USD = 7.8 HKD. No MCC, so points are not estimated here. Open a card for details.",
     "这张卡在香港发行，Plaid 连不上：历史交易来自 Amex 月结单（CSV），新交易在你打开 Amex 网银时由 Tampermonkey 脚本推送。这样会有以下影响：":
@@ -213,6 +216,11 @@
       " “Sync” and “Refresh from bank now” don’t affect it; it only updates when you open the Amex online banking activity page.",
     "当前欠款": "Current balance", "当前欠款、可用额度、还款日、最低还款": "Current balance, available credit, due date and minimum payment",
     "金额以港币显示。": "Amounts are shown in HKD.",
+    "美元小字和各种汇总按交易日的香港金管局 USD/HKD 收盘价换算（金管局按月公布，还没公布的近期日期先用欧洲央行当天参考价），和 Amex 实际入账汇率无关。":
+      " USD figures and totals use the HKMA USD/HKD closing rate of each transaction date (HKMA publishes monthly; recent dates not yet published use the ECB reference rate of that day), independent of Amex’s actual rates.",
+    "美元小字和各种汇总按交易日的香港金管局 USD/HKD 收盘价折算（金管局按月公布，还没公布的近期日期先用欧洲央行当天参考价），余额快照按快照日折算，和汇丰实际入账汇率无关。":
+      " USD figures and totals use the HKMA USD/HKD closing rate of each transaction date (HKMA publishes monthly; recent dates not yet published use the ECB reference rate of that day); balance snapshots use their own date. Independent of HSBC’s actual rates.",
+    "交易日的金管局 USD/HKD 收盘价": "the HKMA USD/HKD closing rate of each transaction date",
     "美元小字和各种汇总按固定汇率 1 USD = 7.8 HKD 换算，和 Amex 实际入账汇率无关。":
       " USD figures and totals use a fixed 1 USD = 7.8 HKD, independent of Amex’s actual rates.",
     "没有 MCC 和 Plaid 商户分类，": "No MCC or Plaid merchant categories, ",
@@ -363,7 +371,7 @@
     R("上次同步：(.+)", (_, d) => `Last synced: ${d}`),
     R("上次导入：(.+)", (_, d) => `Last imported: ${d}`),
     R("余额、额度和账单信息取自汇丰网银，交易来自网银和月结单（PDF），都在你打开汇丰网银时由脚本推送；金额以原币显示，美元小字按 (.+) 换算；结单没有 MCC，本站不估算汇丰积分。点开卡片看详情。",
-      (_, r) => `Balances, limits and statement details come from HSBC online banking; transactions come from online banking and monthly statements (PDF). A script pushes them whenever you open HSBC online banking. Amounts are in their original currency, with USD in small print at ${r.replace(/、/g, ", ")}. No MCC, and HSBC rewards are not estimated. Open a card for details.`),
+      (_, r) => `Balances, limits and statement details come from HSBC online banking; transactions come from online banking and monthly statements (PDF). A script pushes them whenever you open HSBC online banking. Amounts are in their original currency, with USD in small print at ${r.split("、").map((x) => tr(x)).join(", ")}. No MCC, and HSBC rewards are not estimated. Open a card for details.`),
     R("取自汇丰网银（戶口結餘 / 可用信用額），最近一次是 (.+)。戶口結餘不含待处理交易，负数表示有溢缴。", (_, d) => ` come from HSBC online banking (account balance / available credit); last updated ${d}. The account balance excludes pending transactions; a negative balance means a credit.`),
     R("取自汇丰网银（戶口結餘 / 可用信用額），还没抓到过，暂时按期初结余加已导入交易累计。戶口結餘不含待处理交易，负数表示有溢缴。", () => " come from HSBC online banking (account balance / available credit); not captured yet, so for now it is the opening balance plus imported transactions. The account balance excludes pending transactions; a negative balance means a credit."),
     R("美元小字和各种汇总按固定汇率 (1 USD = [\\d.]+ \\w+) 换算，和汇丰实际入账汇率无关。", (_, r) => ` USD figures and totals use a fixed ${r}, independent of HSBC’s actual rates.`),

@@ -37,10 +37,10 @@ function manualNote(it) {
     return `<b>没有通过 Plaid 连接。</b>交易来自你上传的 Apple Card CSV${st.count ? `，已更新到 ${+st.last.slice(5, 7)} 月 ${+st.last.slice(8, 10)} 日` : ""}；Daily Cash 按 Apple Pay 2%、Apple 直营及可识别的合作商户 3% 估算。点开卡片上传新的 CSV、看详情。`;
   }
   if (isHSBC(it)) {
-    const rates = new Set(it.accounts.filter(a => a.orig_currency).map(a => a.fx ? "ECB USD/CNY" : fxNote(a.orig_currency)));
+    const rates = new Set(it.accounts.filter(a => a.orig_currency).map(a => a.orig_currency === "HKD" ? "交易日的金管局 USD/HKD 收盘价" : a.fx ? "ECB USD/CNY" : fxNote(a.orig_currency)));
     return `<b>没有通过 Plaid 连接。</b>余额、额度和账单信息取自汇丰网银，交易来自网银和月结单（PDF），都在你打开汇丰网银时由脚本推送；金额以原币显示，美元小字按 ${[...rates].join("、")} 换算；结单没有 MCC，本站不估算汇丰积分。点开卡片看详情。`;
   }
-  return `<b>没有通过 Plaid 连接。</b>历史交易来自月结单，新交易在你打开 Amex 网银时由脚本推送；金额以港币显示，美元小字按 1 USD = 7.8 HKD 换算；没有 MCC，本站不估算积分。点开卡片看详情。`;
+  return `<b>没有通过 Plaid 连接。</b>历史交易来自月结单，新交易在你打开 Amex 网银时由脚本推送；金额以港币显示，美元小字按交易日的金管局 USD/HKD 收盘价换算；没有 MCC，本站不估算积分。点开卡片看详情。`;
 }
 // 问卷里填 N/A 的账单字段：值换成 null（其余代码按「未知」处理），键名记在 L.na 里，界面显示「没有」
 const naVal = (L, key, f) => (L?.na?.includes(key) ? "没有" : L?.[key] != null ? f(L[key]) : "—");
@@ -66,7 +66,8 @@ function normAccount(a, it) {
   const cur = a.currency;
   const pulse = a.id === pulseCnyId && cur === "CNY";
   const day = a.balance_as_of?.slice(0, 10) || a.liability?.last_statement_issue_date || today();
-  const quote = pulse ? date => pulseRates.quote(date || day) : null;
+  // 人民币（仅 Pulse 人民币户口）用 ECB；港币用金管局（未公布的近期日期用 ECB 补），都按日期取
+  const quote = pulse ? date => pulseRates.quote(date || day) : cur === "HKD" ? date => hkdRates.quote(date || day) : null;
   const fx = quote?.(day);
   const rate = fx?.rate || FX_PER_USD[cur];
   const base = { ...a, source: it.source || "plaid", region: it.region || null, liability: normLiability(a.liability, cur, quote) };
@@ -81,14 +82,18 @@ function normTxn(t) {
   if (!FX_PER_USD[t.currency]) return t;
   const pulse = t.account_id === pulseCnyId && t.currency === "CNY";
   const booked = pulse ? bookedPulseFx(t) : null;
-  const fx = pulse ? booked || pulseRates.quote(t.authorized_date || t.date) : null;
+  const fx = pulse ? booked || pulseRates.quote(t.authorized_date || t.date)
+    : t.currency === "HKD" ? hkdRates.quote(t.authorized_date || t.date) : null;
   return { ...t, amount: booked?.amount ?? toUSD(t.amount, fx?.rate || FX_PER_USD[t.currency]), currency: "USD", orig_amount: t.amount, orig_currency: t.currency, fx };
 }
+const FX_SRC = { HKMA: "HKMA", ECB: "ECB" };
 function fxDescription(x) {
   if (!x.fx) return `按 1 USD = ${FX_PER_USD[x.orig_currency]} ${x.orig_currency} 换算成美元显示`;
   const { date, rate } = x.fx;
-  const source = date ? "ECB " + date : RT_I18N.t("估算汇率");
-  return `${source} · 1 USD = ${rate} CNY · 1 CNY = ${(1 / rate).toFixed(6)} USD`;
+  const cur = x.orig_currency || "CNY";
+  const src = FX_SRC[x.fx.src || x.fx.source] || "ECB";
+  const source = date ? `${src} ${date}` : RT_I18N.t("估算汇率");
+  return `${source} · 1 USD = ${rate} ${cur} · 1 ${cur} = ${(1 / rate).toFixed(6)} USD`;
 }
 // 港币原值的小字（没有换算过的账户返回空）
 // 港币卡（以及以后的汇丰等香港卡）：主显港币（HK$），美元做小字；其他账户照旧显示美元。
@@ -223,7 +228,7 @@ async function api(path, { method = "GET", body } = {}) {
 let ingestVersion = 0;
 async function ingest(data) {
   const version = ++ingestVersion;
-  await pulseRates.prepare(data);
+  await Promise.all([pulseRates.prepare(data), hkdRates.prepare(data)]);
   if (version !== ingestVersion) return;
   state.env = data.env;
   state.txns = data.transactions.map(normTxn);
@@ -238,7 +243,7 @@ async function ingest(data) {
   });
   // Apple Card（CSV 上传）：账单日 / 还款日 / 上期账单按规则现算
   if (window.RT_APPLE) for (const a of Object.values(state.accounts)) if (RT_APPLE.is(a)) a.liability = RT_APPLE.liability(a, state.txns, today());
-  $("#fx-warning").hidden = !pulseRates.estimated;
+  $("#fx-warning").hidden = !(pulseRates.estimated || hkdRates.estimated);
   render();
 }
 
