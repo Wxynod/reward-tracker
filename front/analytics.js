@@ -175,7 +175,7 @@
     const max = rows[0].spend;
     return `<h3>按卡</h3><p class="an-sub">合计 ${money(total)} · 平均倍数 = 估算积分 ÷ 消费</p>
       ${rows.map((r) => `<div class="hbar" data-tip="${esc(`${r.c.label}|消费 ${money(r.spend)}|${r.n} 笔 · 占 ${(r.spend / total * 100).toFixed(1)}%`)}">
-        <div class="hbar-label"><i style="background:${r.c.color}"></i>${esc(r.c.label)}</div>
+        <div class="hbar-label cname"><i style="background:${r.c.color}"></i>${esc(r.c.label)}</div>
         <div class="hbar-track"><b style="width:${(r.spend / max * 100).toFixed(1)}%;background:${r.c.color}"></b></div>
         <div class="hbar-val">${money(r.spend)}<small>${(r.spend / total * 100).toFixed(0)}% · ${R.fmtRate(r.rate, r.unit)}</small></div>
       </div>`).join("")}`;

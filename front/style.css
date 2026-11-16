@@ -1833,3 +1833,17 @@ html[data-font] .login-card h1 { font-size: 44px; line-height: 1.05; letter-spac
 .acct-name .mask, .ad-id h3 span, .ag-name small, .csel-label .cname small { font-family: var(--font-name); font-style: normal; }
 /* 名字里夹的中文标签 / 计数保持正文字体 */
 .er-title :is(.tag, .warn-tag), .mname small { font-family: var(--font-body); font-style: normal; letter-spacing: 0; }
+
+/* 再补：卡名 / 积分计划名 / 余额（类别名中英文不同，暂不改） */
+.prog-seg button, .hbar-label.cname { font-family: var(--font-name); font-weight: 400; font-synthesis: none; letter-spacing: .005em; }
+.prog-seg button.on { font-weight: 400; }
+#account-list .acct-amt > div:first-child, .drill-total {
+  font-family: var(--font-display); font-weight: 400; font-synthesis: none; font-variant-numeric: lining-nums proportional-nums; letter-spacing: 0;
+}
+#account-list .acct-amt > div:first-child { font-size: 22px; line-height: 1.1; }
+.drill-total { font-size: 24px; line-height: 1; }
+#account-list .acct-amt > div:first-child :is(small, .usd) { font-family: var(--font-body); font-variant-numeric: tabular-nums; }
+@media (max-width: 560px) {
+  #account-list .acct.has-face .acct-amt > div:first-child { font-size: 20px; }
+  .drill-total { font-size: 21px; }
+}
