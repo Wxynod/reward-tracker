@@ -5,6 +5,8 @@
 // 不走 Plaid 的账户（例如香港 Amex）：POST /api/manual/import 写入，item 记为 source: "manual"，同步时跳过 Plaid。
 // 可选：Worker secret INGEST_TOKEN 设置后，脚本可以只凭这个令牌调用写入接口（不能读数据）。
 
+import { pushRoutes, sendWeekly } from "./push.js";
+
 const PLAID_HOSTS = {
   sandbox: "https://sandbox.plaid.com",
   production: "https://production.plaid.com",
@@ -36,13 +38,38 @@ export default {
       return json({ error: err.message, plaid: err.plaid || null }, err.status || 500, cors);
     }
   },
-  // 每天定时刷新港币汇率（wrangler.toml [triggers] crons）
+  // 定时任务（wrangler.toml [triggers] crons）：每天刷新港币汇率；周日晚上先同步 Plaid 再推送周报
   async scheduled(event, env, ctx) {
+    if (event.cron === WEEKLY_CRON) {
+      ctx.waitUntil((async () => {
+        await syncAllItems(env).catch((e) => console.error("sync", e.message));
+        await sendWeekly(env, { getJSON, putJSON, loadAll });
+      })().catch((e) => console.error("weekly push", e.message)));
+      return;
+    }
     ctx.waitUntil(refreshHkdRates(env).catch((e) => console.error("hkd fx", e.message)));
   },
 };
 
 // ---------------------------------------------------------------- routes
+
+// 周日 21:07（香港时间）推送周报
+const WEEKLY_CRON = "7 13 * * 0";
+
+async function syncAllItems(env) {
+  const ids = await getJSON(env, "items", []);
+  for (const id of ids) {
+    const item = await getJSON(env, `item:${id}`, null);
+    if (!item || isManual(item)) continue;
+    try {
+      await syncItem(env, id);
+    } catch (e) {
+      const it = await getItem(env, id);
+      it.error = { code: e.plaid?.code || "UNKNOWN", message: e.message };
+      await putJSON(env, `item:${id}`, it);
+    }
+  }
+}
 
 const ROUTES = {
   // 创建 Link token；传 item_id 时进入 update mode（重新登录过期的连接）
@@ -90,16 +117,7 @@ const ROUTES = {
 
   // 拉取所有 Item 的增量交易，然后返回全量数据
   "POST /api/sync": async (env) => {
-    const ids = await getJSON(env, "items", []);
-    for (const id of ids) {
-      try {
-        await syncItem(env, id);
-      } catch (e) {
-        const item = await getItem(env, id);
-        item.error = { code: e.plaid?.code || "UNKNOWN", message: e.message };
-        await putJSON(env, `item:${id}`, item);
-      }
-    }
+    await syncAllItems(env);
     return loadAll(env);
   },
 
@@ -266,6 +284,12 @@ const ROUTES = {
     return { ok: true };
   },
 };
+
+// 周报推送：GET /api/push/key、POST /api/push/subscribe | unsubscribe | test（见 push.js）
+// putJSON 等在文件后面才定义，用箭头函数延迟取值
+Object.assign(ROUTES, pushRoutes({
+  getJSON: (...a) => getJSON(...a), putJSON: (...a) => putJSON(...a), loadAll: (...a) => loadAll(...a),
+}));
 
 // ---------------------------------------------------------------- sync
 

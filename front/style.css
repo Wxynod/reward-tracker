@@ -2153,3 +2153,10 @@ body:has(#weekly:not([hidden])) #txn-detail { z-index: 96; }
 .ign-rule > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ign-rule small { font-size: 11.5px; color: var(--muted); white-space: nowrap; }
 .ign-rname { font-family: var(--font-name); font-weight: 400; font-size: 14.5px; color: var(--ink) !important; }
+
+/* 周报通知 */
+.push-sec .theme-auto { margin-top: 10px; }
+.push-sec .switch:disabled { opacity: .45; cursor: not-allowed; }
+.push-msg { margin: 10px 0 0; font-size: 12px; line-height: 1.5; color: var(--muted); }
+.push-msg.bad { color: var(--warn-ink); }
+#push-test { margin-top: 10px; }

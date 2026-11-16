@@ -39,7 +39,7 @@
   const cards = () => creditAccounts().slice().sort((a, b) =>
     `${a.institution}|${cardName(a)}|${a.mask}`.localeCompare(`${b.institution}|${cardName(b)}|${b.mask}`));
   function excluded() { try { return new Set(JSON.parse(localStorage.getItem(KEY) || "[]")); } catch { return new Set(); } }
-  function saveExcluded(set) { try { localStorage.setItem(KEY, JSON.stringify([...set])); } catch { /* 隐私模式 */ } }
+  function saveExcluded(set) { try { localStorage.setItem(KEY, JSON.stringify([...set])); } catch { /* 隐私模式 */ } window.RT_PUSH?.sync(); }
   const selected = () => { const ex = excluded(); return cards().filter((a) => !ex.has(a.id)); };
 
   // ------------------------------------------------------------ 数据
@@ -436,9 +436,10 @@
     mo.observe(d, { attributes: true, attributeFilter: ["hidden"] });
   }
 
-  function open() {
+  // ws（可选）：打开指定那一周，例如从推送通知点进来
+  function open(ws) {
     const el = shell();
-    ui.ws = latestWeek(); ui.menu = false; ui.archive = false; ui.dir = 0; ui.all = false; prevTotal = null;
+    ui.ws = typeof ws === "string" && /^\d{4}-\d{2}-\d{2}$/.test(ws) ? weekStart(ws) : latestWeek(); ui.menu = false; ui.archive = false; ui.dir = 0; ui.all = false; prevTotal = null;
     el.hidden = false;
     paint();
     document.documentElement.classList.add("d-lock");

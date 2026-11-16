@@ -3,8 +3,9 @@ main = "src/index.js"
 compatibility_date = "2026-11-01"
 
 # 每天 09:17（香港时间）刷新港币汇率：金管局公布后覆盖之前用 ECB 补的日期
+# 每周日 21:07（香港时间）推送周报（和 src/index.js 的 WEEKLY_CRON 保持一致）
 [triggers]
-crons = ["17 1 * * *"]
+crons = ["17 1 * * *", "7 13 * * 0"]
 
 [vars]
 # sandbox：先用测试账号（user_good / pass_good）跑通流程；跑通后改成 production 连真实卡片
