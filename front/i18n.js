@@ -99,7 +99,7 @@
     // 权益任务
     "已完成": "Done", "已过期": "Expired", "删除": "Delete", "自动": "Auto",
     "还没有自定义权益任务。例如开卡奖励的消费门槛、每月 Uber / 餐饮 credit。": "No custom tasks yet — e.g. a sign-up bonus spend target or a monthly Uber / dining credit.",
-    "＋ 新增权益任务": "+ Add a benefit task", "未设置卡型": "No card product set", "＋": "＋",
+    "＋ 新增权益任务": "+ Add a benefit task", "清除筛选 ✕": "Clear filter ✕", "清除筛选": "Clear filter", "未设置卡型": "No card product set", "＋": "＋",
     "名称": "Name", "卡片": "Card", "开始": "Start", "截止": "End", "目标": "Target", "商户关键词": "Merchant keywords", "备注": "Notes",
     "消费金额": "Spend amount", "消费笔数": "Purchase count", "可选": "Optional",
     "例：Amex Gold Uber Cash / 开卡消费 $4,000": "e.g. Amex Gold Uber Cash / $4,000 sign-up spend",
