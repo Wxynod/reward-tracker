@@ -257,7 +257,7 @@
     .pane .stag{transition:opacity 360ms ease calc(160ms + var(--i,0) * 48ms),transform 560ms var(--spring) calc(140ms + var(--i,0) * 48ms)}
     .compact .pane .stag{opacity:0;transform:translateY(14px) scale(.985);transition:opacity 100ms ease,transform 180ms ease}
 
-    header{flex:none;display:flex;align-items:center;gap:11px;padding:16px 16px 10px}
+    header{flex:none;display:flex;align-items:center;gap:11px;padding:16px 16px 4px}
     .brand{width:38px;height:38px;flex:none;border-radius:50%;position:relative;overflow:hidden;
       background:radial-gradient(140% 120% at 28% 12%,rgba(var(--rgb),.78),rgb(var(--rgb)) 52%,rgb(var(--deep)));
       box-shadow:inset 0 1px 1px rgba(255,255,255,.7),inset 0 -2px 4px rgba(var(--deep),.35),0 4px 10px -3px rgba(var(--deep),.5)}
@@ -271,9 +271,9 @@
     .close:hover{background:rgba(255,255,255,.78)}.close:active{transform:scale(.9)}
     .close svg{width:15px;height:15px}
 
-    .body{flex:1;min-height:0;overflow:auto;padding:2px 14px 16px;overscroll-behavior:contain;
+    .body{flex:1;min-height:0;overflow:auto;padding:8px 14px 16px;overscroll-behavior:contain;
       scrollbar-width:thin;scrollbar-color:rgba(var(--deep),.22) transparent;
-      mask-image:linear-gradient(180deg,transparent 0,#000 8px,#000 calc(100% - 14px),transparent);-webkit-mask-image:linear-gradient(180deg,transparent 0,#000 8px,#000 calc(100% - 14px),transparent)}
+      mask-image:linear-gradient(180deg,transparent 0,#000 6px,#000 calc(100% - 14px),transparent);-webkit-mask-image:linear-gradient(180deg,transparent 0,#000 6px,#000 calc(100% - 14px),transparent)}
     .body>*+*{margin-top:10px}
 
     .status{display:flex;gap:8px;align-items:flex-start;padding:9px 12px;border-radius:14px;font-size:12.5px;font-weight:500;line-height:1.45;overflow-wrap:anywhere;
