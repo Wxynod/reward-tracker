@@ -53,6 +53,8 @@
     "已记住的倍数": "Remembered multipliers", "不计入分析": "Excluded from analytics", "不计入分析的设置已更新": "analytics exclusions updated",
     "还没有。编辑模式下改过的倍数会出现在这里。": "None yet. Multipliers you change in edit mode show up here.",
     "数据": "Data",
+    "刚刷的卡（Pending）没出现时，让 Plaid 立刻去银行抓一次": "Ask Plaid to fetch fresh (Pending) transactions from the bank right now",
+    "通过 Plaid 连接新的美国银行或信用卡账户。": "Connect a new US bank or credit card account via Plaid.",
     "「同步」只拿 Plaid 已经缓存的数据，Plaid 一般每天去银行抓几次。刚刷的卡（Pending）没出现时，可以让 Plaid 立刻去银行抓一次。":
       "“Sync” only reads what Plaid has cached; Plaid polls banks a few times a day. If a fresh (Pending) purchase is missing, ask Plaid to fetch from the bank right now.",
     "立刻从银行刷新": "Refresh from bank now",
@@ -105,6 +107,7 @@
     // 交易页
     "支出": "Spent", "退款 / 还款": "Refunds / payments", "笔数": "Count", "全部卡片": "All cards", "任意卡片": "Any card",
     "没有符合条件的交易": "No matching transactions", "未知账户": "Unknown account",
+    "还没有连接银行。点击右上角「设置」→「连接银行」开始。": "No banks linked yet. Open Settings → “Link bank” at the top right to start.",
     "还没有连接银行。点击右上角「连接银行」开始。": "No banks linked yet. Click “Link bank” at the top right to start.",
     "待入账": "Pending", "线下": "In store", "线上": "Online",
     "In store：在实体店刷卡 / 拍卡": "In store: card swiped or tapped at a shop",

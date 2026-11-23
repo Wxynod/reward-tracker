@@ -392,7 +392,7 @@ function renderTxns() {
   renderCatBar();
 
   if (!state.items.length) {
-    $("#txn-list").innerHTML = `<div class="empty">还没有连接银行。点击右上角「连接银行」开始。</div>`;
+    $("#txn-list").innerHTML = `<div class="empty">还没有连接银行。点击右上角「设置」→「连接银行」开始。</div>`;
     return;
   }
   if (!list.length) { $("#txn-list").innerHTML = `<div class="empty">没有符合条件的交易</div>`; return; }
@@ -1246,7 +1246,7 @@ function bind() {
     ro.observe(nav); $$(".tabs button").forEach((b) => ro.observe(b));
   } else window.addEventListener("resize", () => placeTabInk(true));
   $("#btn-sync").addEventListener("click", sync);
-  $("#btn-link").addEventListener("click", () => connect());
+  $("#btn-link").addEventListener("click", () => { toggleSettings(false); connect(); });
   $("#btn-logout").addEventListener("click", logout);
   $("#login-form").addEventListener("submit", doLogin);
   ["#f-account", "#f-month", "#f-q"].forEach((s) => $(s).addEventListener("input", renderTxns));

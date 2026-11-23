@@ -1073,10 +1073,18 @@ html, body { overflow-x: clip; }
 
 @media (max-width: 560px) {
   main { padding: 12px 14px 80px; }
-  .masthead { padding: 18px 14px 12px; gap: 10px; }
-  .actions { width: 100%; }
-  .actions .btn { padding: 6px 12px; }
-  #btn-link { flex: 1; }
+  .masthead { padding: calc(32px + env(safe-area-inset-top, 0px)) 14px 12px; gap: 10px; }
+  .actions { width: 100%; flex-wrap: nowrap; }
+  .actions .btn { padding: 6px 12px; white-space: nowrap; }
+  #btn-refresh { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  html[lang="en"] .actions { gap: 6px; }
+  html[lang="en"] .actions .btn { padding: 6px 9px; font-size: 13.5px; }
+  html[lang="en"] .actions .btn.icon { padding: 6px 8px; }
+}
+@media (max-width: 385px) {
+  html[lang="en"] .actions .btn { padding: 6px 7px; font-size: 12.5px; }
+}
+@media (max-width: 560px) {
   .tabs { padding: 0 14px; gap: 0; justify-content: space-between; }
   .tabs button { font-size: 14px; }
 
@@ -1764,7 +1772,7 @@ html[data-font] .brand h1, html[data-font] .login-card h1,
   letter-spacing: 0;
 }
 /* 品牌名：始终 Reward Tracker */
-html[data-font] .brand h1 { font-size: 42px; line-height: 1; letter-spacing: -.005em; }
+html[data-font] .brand h1 { font-size: 42px; line-height: 1.08; letter-spacing: -.005em; }
 html[data-font] .login-card h1 { font-size: 44px; line-height: 1.05; letter-spacing: -.005em; margin-bottom: 6px; }
 /* 大数字：原来 600–700 粗体，换成 400 的窄体后放大约 1.25 倍 */
 .pbal { font-size: 40px; line-height: 1.05; }

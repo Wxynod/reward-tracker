@@ -9,12 +9,12 @@
   <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
   <link rel="manifest" href="manifest.webmanifest">
   <meta name="theme-color" content="#f6f2ea">
-  <script src="theme.js?v=20261117a"></script>
+  <script src="theme.js?v=20261123a"></script>
   <meta name="apple-mobile-web-app-title" content="记账本">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif&family=Noto+Sans:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;600;700&family=Noto+Serif:wght@400;500;600;700&family=Noto+Serif+SC:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=20261117a">
+  <link rel="stylesheet" href="style.css?v=20261123a">
   <script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"></script>
 </head>
 <body>
@@ -36,7 +36,7 @@
     </div>
     <div class="actions">
       <button id="btn-sync" class="btn">同步</button>
-      <button id="btn-link" class="btn primary">连接银行</button>
+      <button id="btn-refresh" class="btn primary" title="刚刷的卡（Pending）没出现时，让 Plaid 立刻去银行抓一次">立刻从银行刷新</button>
       <div class="settings-wrap">
         <button id="btn-settings" class="btn icon" aria-label="设置" aria-expanded="false" title="设置">
           <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" d="M12 15.2a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4Z"/><path fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" d="M19.4 13.5a7.6 7.6 0 0 0 0-3l2-1.6-2-3.4-2.4 1a7.5 7.5 0 0 0-2.6-1.5L14 2.5h-4l-.4 2.5A7.5 7.5 0 0 0 7 6.5l-2.4-1-2 3.4 2 1.6a7.6 7.6 0 0 0 0 3l-2 1.6 2 3.4 2.4-1a7.5 7.5 0 0 0 2.6 1.5l.4 2.5h4l.4-2.5a7.5 7.5 0 0 0 2.6-1.5l2.4 1 2-3.4-2-1.6Z"/></svg>
@@ -104,8 +104,8 @@
           </section>
           <section>
             <h4>数据</h4>
-            <p class="hint">「同步」只拿 Plaid 已经缓存的数据，Plaid 一般每天去银行抓几次。刚刷的卡（Pending）没出现时，可以让 Plaid 立刻去银行抓一次。</p>
-            <button id="btn-refresh" class="btn primary wide" style="margin-bottom:10px">立刻从银行刷新</button>
+            <p class="hint">通过 Plaid 连接新的美国银行或信用卡账户。</p>
+            <button id="btn-link" class="btn primary wide" style="margin-bottom:10px">连接银行</button>
             <p class="hint">旧交易没有存 MCC。重新拉取一次全部交易即可补齐（不额外计费）。</p>
             <button id="btn-resync" class="btn wide">重新拉取全部交易</button>
           </section>
@@ -215,23 +215,23 @@
     </span>
   </div>
   <div id="toast" role="status"></div>
-  <script src="i18n.js?v=20261117a"></script>
-  <script src="config.js?v=20261117a"></script>
-  <script src="maps-key.js?v=20261117a"></script>
-  <script src="icons.js?v=20261117a"></script>
-  <script src="brands.js?v=20261117a"></script>
-  <script src="rewards.js?v=20261117a"></script>
-  <script src="cards.js?v=20261117a"></script>
-  <script src="drill.js?v=20261117a"></script>
-  <script src="analytics.js?v=20261117a"></script>
-  <script src="weekly.js?v=20261117a"></script>
-  <script src="push.js?v=20261117a"></script>
-  <script src="ignore.js?v=20261117a"></script>
-  <script src="fx.js?v=20261117a"></script>
-  <script src="app.js?v=20261117a"></script>
-  <script src="detail.js?v=20261117a"></script>
-  <script src="acct.js?v=20261117a"></script>
-  <script src="apple.js?v=20261117a"></script>
-  <script src="calendar.js?v=20261117a"></script>
+  <script src="i18n.js?v=20261123a"></script>
+  <script src="config.js?v=20261123a"></script>
+  <script src="maps-key.js?v=20261123a"></script>
+  <script src="icons.js?v=20261123a"></script>
+  <script src="brands.js?v=20261123a"></script>
+  <script src="rewards.js?v=20261123a"></script>
+  <script src="cards.js?v=20261123a"></script>
+  <script src="drill.js?v=20261123a"></script>
+  <script src="analytics.js?v=20261123a"></script>
+  <script src="weekly.js?v=20261123a"></script>
+  <script src="push.js?v=20261123a"></script>
+  <script src="ignore.js?v=20261123a"></script>
+  <script src="fx.js?v=20261123a"></script>
+  <script src="app.js?v=20261123a"></script>
+  <script src="detail.js?v=20261123a"></script>
+  <script src="acct.js?v=20261123a"></script>
+  <script src="apple.js?v=20261123a"></script>
+  <script src="calendar.js?v=20261123a"></script>
 </body>
 </html>
