@@ -1762,8 +1762,10 @@ html[data-theme="dark"] .font-veil { background: color-mix(in srgb, var(--paper)
 
 /* ================================================================ 标题与大数字：Instrument Serif
    窄体展示衬线，只有 400 一个字重，所以不加粗，靠放大字号和紧一点的字距撑起层级；
-   不受 Serif / Sans / System 设置影响。只有拉丁字母——汉字（如单位「点」）自动落回当前正文字体。 */
-:root { --font-display: "Instrument Serif", var(--font-body); }
+   不受 Serif / Sans / System 设置影响。只有拉丁字母——汉字（如单位「点」）由寒蝉端黑宋 Condensed 接上。 */
+:root { --font-display: "Instrument Serif", "RT Display CJK", var(--font-body); }
+/* 标题里的汉字（「11月26日」的月 / 日、单位「点」等）用寒蝉端黑宋 Condensed（fonts/cdhs.css），
+   和 Instrument Serif 的窄数字同宽同高；字体里没有的生僻字再落回正文字体。 */
 html[data-font] .brand h1, html[data-font] .login-card h1,
 .pbal, .bal-edit input, .stat .value, .d-amt, .ad-stats b, .up-d b, .hkt-nums b, .txn .amt {
   font-family: var(--font-display);

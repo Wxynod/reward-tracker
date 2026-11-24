@@ -22,3 +22,6 @@ CHATGPT.md
 
 # 各卡结单 / 交易导出原件：含消费明细，只留在本机
 card_statements/
+
+# 临时文件（可整个删掉）
+_to_delete/
