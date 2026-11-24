@@ -2170,3 +2170,25 @@ body:has(#weekly:not([hidden])) #txn-detail { z-index: 96; }
 .push-msg { margin: 10px 0 0; font-size: 12px; line-height: 1.5; color: var(--muted); }
 .push-msg.bad { color: var(--warn-ink); }
 #push-test { margin-top: 10px; }
+
+/* ================================================================ 中文界面的分区标题：寒蝉端黑宋 Condensed Medium
+   只在中文界面（html 不是 lang="en"）生效。汉字走 "RT Display CJK" 的 500（Condensed Medium），
+   标题里的拉丁字母和数字（如「Amex HK」「Brilliant」「$25」）走 Instrument Serif 400——
+   它没有粗体，font-synthesis: none 不让浏览器假粗。窄体在同字号下显得小，字号比原来放大约 1.2 倍、字距收窄。
+   卡名 / 机构名的 h3（.d-title、.ad-id、.hkt-title、.inst-head）仍用 RT Name，不在这里。 */
+:root { --font-heading: "Instrument Serif", "RT Display CJK", var(--font-body); }
+html:not([lang="en"]) :is(.rewards-head h2, .section-title, .an-card h3, .cal-title h3, .fp-head h3, .benefit-head h3, dialog h2) {
+  font-family: var(--font-heading); font-weight: 500; font-synthesis: none;
+  font-variant-numeric: lining-nums proportional-nums; line-height: 1.25; letter-spacing: .03em;
+}
+html:not([lang="en"]) .rewards-head h2 { font-size: 24px; letter-spacing: .06em; }
+html:not([lang="en"]) .section-title { font-size: 18px; letter-spacing: .05em; }
+html:not([lang="en"]) .an-card h3 { font-size: 19px; }
+html:not([lang="en"]) .cal-title h3 { font-size: 24px; letter-spacing: .05em; }
+html:not([lang="en"]) .fp-head h3 { font-size: 22px; }
+html:not([lang="en"]) .benefit-head h3 { font-size: 19px; letter-spacing: .02em; }
+html:not([lang="en"]) dialog h2 { font-size: 23px; }
+/* 标题里附带的说明小字保持正文字体 */
+html:not([lang="en"]) .section-title .hkt-src { font-family: var(--font-body); font-weight: 400; letter-spacing: 0; }
+@media (max-width: 640px) { html:not([lang="en"]) .cal-title h3 { font-size: 21px; } }
+@media (max-width: 560px) { html:not([lang="en"]) .rewards-head h2 { font-size: 21px; } }
