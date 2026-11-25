@@ -234,6 +234,7 @@ async function ingest(data) {
   state.txns = data.transactions.map(normTxn);
   state.benefits = data.benefits || [];
   state.trackers = data.trackers || {};
+  state.fetchMeta = data.fetch_meta || {};
   state.rewards = { ...EMPTY_REWARDS(), ...(data.rewards || {}) };
   state.accounts = {};
   state.items = data.items.map(it => {
@@ -245,6 +246,7 @@ async function ingest(data) {
   if (window.RT_APPLE) for (const a of Object.values(state.accounts)) if (RT_APPLE.is(a)) a.liability = RT_APPLE.liability(a, state.txns, today());
   $("#fx-warning").hidden = !(pulseRates.estimated || hkdRates.estimated);
   render();
+  renderFetchTimes();
 }
 
 async function load() {
@@ -258,15 +260,52 @@ async function loadLogos() {
   catch { /* logo 拿不到时用 favicon / 字母徽章兜底 */ }
 }
 
-async function sync() {
+let syncing = false;
+async function sync(opts) {
+  const auto = opts?.auto === true;   // 按钮点击时传进来的是 click 事件，不算自动
+  if (syncing) return;
+  syncing = true;
   const btn = $("#btn-sync");
   btn.disabled = true; btn.textContent = "同步中…";
   try {
-    await ingest(await api("/api/sync", { method: "POST" }));
+    await ingest(await api("/api/sync", { method: "POST", body: auto ? { auto: true } : undefined }));
     const errs = state.items.filter((i) => i.error);
-    toast(errs.length ? `${errs.length} 个连接需要处理，见「账户」` : "已同步");
+    toast(errs.length ? `${errs.length} 个连接需要处理，见「账户」` : auto ? "超过 2 小时未同步，已自动同步" : "已同步");
   } catch (e) { toast(e.message); }
-  finally { btn.disabled = false; btn.textContent = "同步"; }
+  finally { syncing = false; btn.disabled = false; btn.textContent = "同步"; }
+}
+
+// 打开网页（或从后台切回来）时：距上次同步超过 2 小时就马上同步一次。
+// 「从银行抓取」由 Worker 每天 06:00（香港时间）定时做，这里不管。时间记在 Worker（KV meta:fetch），所有设备共用。
+const AUTO_SYNC_MS = 2 * 3600e3;
+function autoSync() {
+  if (!cfg.token || !state.fetchMeta) return;
+  const last = Date.parse(state.fetchMeta.sync_at || "") || 0;
+  if (Date.now() - last > AUTO_SYNC_MS) sync({ auto: true });
+}
+
+// 设置「数据」里显示上次同步 / 上次从银行抓取的时间；同步按钮的悬停提示也带上
+function renderFetchTimes() {
+  const el = $("#fetch-times"), m = state.fetchMeta || {};
+  const en = window.RT_I18N?.lang === "en";
+  const when = (iso) => {
+    const t = Date.parse(iso || "");
+    if (!t) return en ? "never" : "尚无记录";
+    const d = new Date(t), min = Math.round((Date.now() - t) / 60e3);
+    const hm = `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+    const ago = min < 1 ? (en ? "just now" : "刚刚") : min < 60 ? (en ? `${min} min ago` : `${min} 分钟前`)
+      : min < 48 * 60 ? (en ? `${Math.round(min / 60)} h ago` : `${Math.round(min / 60)} 小时前`) : "";
+    return ago ? (en ? `${hm} (${ago})` : `${hm}（${ago}）`) : hm;
+  };
+  const by = (b) => ({ manual: en ? "manual" : "手动", auto: en ? "auto" : "自动", cron: en ? "scheduled" : "定时" })[b] || "";
+  const line = (label, at, b) => `<div>${label}：${when(at)}${at && by(b) ? ` · ${by(b)}` : ""}</div>`;
+  if (el) el.innerHTML = en
+    ? line("Last sync", m.sync_at, m.sync_by).replace("：", ": ") + line("Last bank fetch", m.refresh_at, m.refresh_by).replace("：", ": ")
+      + "<div>Opening the page syncs if the last sync is over 2 h old; the bank is fetched daily at 06:00 HKT.</div>"
+    : line("上次同步", m.sync_at, m.sync_by) + line("上次从银行抓取", m.refresh_at, m.refresh_by)
+      + "<div>打开网页时距上次同步超过 2 小时会自动同步；每天香港时间 06:00 自动从银行抓取。</div>";
+  const btn = $("#btn-sync");
+  if (btn) btn.title = (en ? "Last sync: " : "上次同步：") + when(m.sync_at);
 }
 
 // ---------------------------------------------------------------- plaid link
@@ -1057,6 +1096,7 @@ function toggleSettings(open) {
   clearTimeout(settingsTimer);
   btn.setAttribute("aria-expanded", String(show));
   if (show) {
+    renderFetchTimes();   // 「x 分钟前」随打开时刻更新
     panel.hidden = false;
     panel.scrollTop = 0;
     void panel.offsetHeight; // 强制重排，保证过渡从收起状态开始
@@ -1201,6 +1241,7 @@ async function doLogin(e) {
     f.password.value = "";
     showApp();
     await load();
+    autoSync();
   } catch (err) {
     showLogin(err.message === "Failed to fetch" ? "连不上 Worker，请检查 config.js 和 ALLOWED_ORIGINS" : err.message);
   } finally {
@@ -1279,6 +1320,8 @@ function bind() {
 }
 
 bind();
+// 从后台切回来（手机主屏幕 App 常常不重新加载页面）也按 2 小时规则补同步
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") autoSync(); });
 // 窗口宽度跨过手机断点时重画图表（图表按宽度选择不同的画布比例）
 let wasNarrow = innerWidth < 560;
 addEventListener("resize", () => { const n = innerWidth < 560; if (n !== wasNarrow) { wasNarrow = n; render(); } });
@@ -1287,7 +1330,7 @@ $("#r-month").value = $("#f-month").value;
 render();
 if (cfg.token) {
   showApp();
-  if (!resumeOAuth()) load().catch((e) => toast(e.message));
+  if (!resumeOAuth()) load().then(autoSync).catch((e) => toast(e.message));
 } else {
   showLogin();
 }

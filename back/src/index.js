@@ -40,23 +40,61 @@ export default {
   },
   // 定时任务（wrangler.toml [triggers] crons）：每天刷新港币汇率；周日晚上先同步 Plaid 再推送周报
   async scheduled(event, env, ctx) {
+    if (event.cron === REFRESH_CRON) {
+      ctx.waitUntil(refreshAllItems(env, "cron").catch((e) => console.error("refresh", e.message)));
+      return;
+    }
     if (event.cron === WEEKLY_CRON) {
       ctx.waitUntil((async () => {
-        await syncAllItems(env).catch((e) => console.error("sync", e.message));
+        await syncAllItems(env, "cron").catch((e) => console.error("sync", e.message));
         await sendWeekly(env, { getJSON, putJSON, loadAll });
       })().catch((e) => console.error("weekly push", e.message)));
       return;
     }
-    ctx.waitUntil(refreshHkdRates(env).catch((e) => console.error("hkd fx", e.message)));
+    // 09:17：刷新港币汇率，顺便同步一次（把 06:00 让银行抓到的新交易拉进来）
+    ctx.waitUntil(Promise.all([
+      refreshHkdRates(env).catch((e) => console.error("hkd fx", e.message)),
+      syncAllItems(env, "cron").catch((e) => console.error("sync", e.message)),
+    ]));
   },
 };
 
 // ---------------------------------------------------------------- routes
 
+// 让 Plaid 去银行抓所有连接的最新交易；至少一个成功才记下抓取时间
+async function refreshAllItems(env, by) {
+  const ids = await getJSON(env, "items", []);
+  const results = [];
+  for (const id of ids) {
+    const item = await getItem(env, id);
+    if (isManual(item)) continue; // 手动导入的账户没有 Plaid 连接
+    try {
+      await plaid(env, "/transactions/refresh", { access_token: item.access_token });
+      results.push({ institution: item.institution, ok: true });
+    } catch (e) {
+      results.push({ institution: item.institution, ok: false, error: e.plaid?.code || e.message });
+    }
+  }
+  if (results.some((r) => r.ok)) await markFetch(env, "refresh", by);
+  return results;
+}
+
 // 周日 21:07（香港时间）推送周报
 const WEEKLY_CRON = "7 13 * * SUN";
+// 每天 06:00（香港时间）让 Plaid 去银行抓一次交易
+const REFRESH_CRON = "0 22 * * *";
 
-async function syncAllItems(env) {
+// 「同步」和「从银行抓取」的最近时间：KV meta:fetch = { sync_at, sync_by, refresh_at, refresh_by }
+// by：manual（点按钮）/ auto（打开网页时自动补）/ cron（定时任务）。随 /api/data 下发，前端据此决定要不要自动同步。
+const FETCH_META = "meta:fetch";
+async function markFetch(env, kind, by) {
+  const meta = await getJSON(env, FETCH_META, {});
+  meta[`${kind}_at`] = new Date().toISOString();
+  meta[`${kind}_by`] = by;
+  await putJSON(env, FETCH_META, meta);
+}
+
+async function syncAllItems(env, by = "manual") {
   const ids = await getJSON(env, "items", []);
   for (const id of ids) {
     const item = await getJSON(env, `item:${id}`, null);
@@ -69,6 +107,7 @@ async function syncAllItems(env) {
       await putJSON(env, `item:${id}`, it);
     }
   }
+  await markFetch(env, "sync", by);
 }
 
 const ROUTES = {
@@ -116,8 +155,8 @@ const ROUTES = {
   },
 
   // 拉取所有 Item 的增量交易，然后返回全量数据
-  "POST /api/sync": async (env) => {
-    await syncAllItems(env);
+  "POST /api/sync": async (env, body) => {
+    await syncAllItems(env, body.auto ? "auto" : "manual");
     return loadAll(env);
   },
 
@@ -140,21 +179,7 @@ const ROUTES = {
 
   // 让 Plaid 立刻去银行抓最新交易（含 Pending）。异步完成，几十秒后再 /api/sync 就能拿到。
   // Trial 计划含 Refresh；按量付费计划下 /transactions/refresh 按次计费
-  "POST /api/refresh": async (env) => {
-    const ids = await getJSON(env, "items", []);
-    const results = [];
-    for (const id of ids) {
-      const item = await getItem(env, id);
-      if (isManual(item)) continue; // 手动导入的账户没有 Plaid 连接
-      try {
-        await plaid(env, "/transactions/refresh", { access_token: item.access_token });
-        results.push({ institution: item.institution, ok: true });
-      } catch (e) {
-        results.push({ institution: item.institution, ok: false, error: e.plaid?.code || e.message });
-      }
-    }
-    return { results };
-  },
+  "POST /api/refresh": async (env) => ({ results: await refreshAllItems(env, "manual") }),
 
   // 全量重新拉取：cursor 清零，重建交易缓存（用来补齐旧交易缺的 MCC 等字段；/transactions/sync 不按次计费）
   "POST /api/resync": async (env) => {
@@ -413,12 +438,13 @@ async function loadAll(env) {
     transactions = transactions.concat(Object.values(txns));
   }
   transactions.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
-  const [benefits, rewards, amexHk] = await Promise.all([
+  const [benefits, rewards, amexHk, fetchMeta] = await Promise.all([
     getJSON(env, "benefits", []),
     getJSON(env, "rewards", { cards: {}, rules: {}, balances: {}, closing: {}, cardface: {}, ignore: { ids: {}, names: [] } }),
     getJSON(env, "tracker:amex_hk", null),
+    getJSON(env, FETCH_META, {}),
   ]);
-  return { env: env.PLAID_ENV || "sandbox", items, transactions, benefits, rewards, trackers: { amex_hk: amexHk },
+  return { env: env.PLAID_ENV || "sandbox", items, transactions, benefits, rewards, trackers: { amex_hk: amexHk }, fetch_meta: fetchMeta,
     fx: { usd_hkd: await hkdRatesForData(env) } };
 }
 

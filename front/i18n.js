@@ -196,7 +196,7 @@
     "上个月": "Previous month", "下个月": "Next month", "关闭": "Close", "关闭（Esc）": "Close (Esc)", "向左滚动": "Scroll left", "向右滚动": "Scroll right",
     "收起": "Less", "更多": "More", "查看": "View", "点": "pts", "笔": "txns",
     // 提示
-    "请先登录": "Please sign in", "登录已过期，请重新登录": "Session expired, please sign in again", "同步中…": "Syncing…", "已同步": "Synced",
+    "请先登录": "Please sign in", "登录已过期，请重新登录": "Session expired, please sign in again", "同步中…": "Syncing…", "已同步": "Synced", "超过 2 小时未同步，已自动同步": "Over 2 hours since the last sync — synced automatically",
     "连接成功，正在保存…": "Linked, saving…", "连接成功。新连接的交易可能要几分钟后才能同步到": "Linked. Transactions from a new link may take a few minutes to arrive",
     "已退出": "Cancelled", "已断开": "Unlinked", "没有改动": "No changes", "已请求银行刷新…": "Refresh requested…",
     "已请求刷新，约 1 分钟后自动同步": "Refresh requested; syncing automatically in about a minute",

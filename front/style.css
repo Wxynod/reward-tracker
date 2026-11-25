@@ -249,6 +249,8 @@ dialog h2 { margin: 0; font-size: 20px; }
 .settings section:last-child { border-bottom: none; }
 .settings h4 { margin: 0 0 4px; font-size: 14px; letter-spacing: .06em; }
 .settings .hint { margin-bottom: 10px; line-height: 1.55; }
+.settings .fetch-times { margin: 12px 0 0; font-size: 12px; line-height: 1.7; }
+.settings .fetch-times div:last-child { margin-top: 4px; }
 .map-row { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); margin-bottom: 10px; }
 .map-row select { border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; background: var(--field); color: var(--ink); }
 .rule-row { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; align-items: center; font-size: 13px; padding: 4px 0; }
