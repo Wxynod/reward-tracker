@@ -123,7 +123,7 @@ The language switch sits at the top of the settings panel (⚙). The choice is s
 
 ### Mobile
 
-On small screens the layout becomes a phone layout: sheets open as bottom sheets, the calendar goes full screen, and tables collapse into labelled rows. The app can be saved to the home screen through its web-app manifest and icons.
+On small screens the layout becomes a phone layout: sheets open as bottom sheets, the calendar goes full screen, and tables collapse into labelled rows. The app can be saved to the home screen through its web-app manifest and icons: a full-bleed Apple touch icon, "any" and maskable Android/desktop icons, a monochrome icon for Android themed icons, a notification badge, and an SVG + ICO favicon. All of them are drawn as SVG in `scripts/build_icons.mjs`; run `node scripts/build_icons.mjs` to regenerate them into `front/`.
 
 ![Mobile](docs/screenshots/12-mobile.png)
 

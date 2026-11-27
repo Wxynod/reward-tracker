@@ -10,7 +10,7 @@ self.addEventListener("push", (e) => {
     body: msg.body || "",
     tag: msg.tag || "weekly",
     icon: new URL("icon-192.png", scope).href,
-    badge: new URL("favicon-64.png", scope).href,
+    badge: new URL("badge-96.png", scope).href,   // 单色剪影：Android 状态栏只取 alpha 通道
     data: { url: msg.url || scope },
   }));
 });
